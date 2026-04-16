@@ -10,5 +10,5 @@ load_dotenv(dotenv_path=ENV_PATH)
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://usuario:password@localhost:5432/rastreo_db",
+    "sqlite:///./rastreo.db",
 )

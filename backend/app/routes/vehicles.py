@@ -1,35 +1,22 @@
-from fastapi import APIRouter, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.vehicle import Vehicle
+from app.schemas.vehicles import VehicleCreate, VehicleResponse
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
-class VehicleCreate(BaseModel):
-    nombre: str
-    matricula: str
-    descripcion: str
+@router.get("", response_model=list[VehicleResponse])
+def list_vehicles(db: Session = Depends(get_db)):
+    return db.query(Vehicle).all()
 
 
-vehicles: list[dict] = []
-next_vehicle_id = 1
-
-
-@router.get("")
-def list_vehicles():
-    return vehicles
-
-
-@router.post("", status_code=status.HTTP_201_CREATED)
-def create_vehicle(vehicle_data: VehicleCreate):
-    global next_vehicle_id
-
-    vehicle = {
-        "id": next_vehicle_id,
-        "nombre": vehicle_data.nombre,
-        "matricula": vehicle_data.matricula,
-        "descripcion": vehicle_data.descripcion,
-    }
-    vehicles.append(vehicle)
-    next_vehicle_id += 1
-
+@router.post("", response_model=VehicleResponse, status_code=status.HTTP_201_CREATED)
+def create_vehicle(vehicle_data: VehicleCreate, db: Session = Depends(get_db)):
+    vehicle = Vehicle(**vehicle_data.model_dump())
+    db.add(vehicle)
+    db.commit()
+    db.refresh(vehicle)
     return vehicle

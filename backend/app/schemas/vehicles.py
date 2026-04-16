@@ -2,22 +2,17 @@ from pydantic import BaseModel
 
 
 class VehicleBase(BaseModel):
-    plate: str
-    brand: str
-    model: str
-    year: int | None = None
+    nombre: str
+    matricula: str
+    descripcion: str | None = None
 
 
 class VehicleCreate(VehicleBase):
     pass
 
 
-class VehicleUpdate(BaseModel):
-    plate: str | None = None
-    brand: str | None = None
-    model: str | None = None
-    year: int | None = None
-
-
-class Vehicle(VehicleBase):
+class VehicleResponse(VehicleBase):
     id: int
+
+    class Config:
+        from_attributes = True
