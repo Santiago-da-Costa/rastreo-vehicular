@@ -15,6 +15,18 @@ def list_trips(db: Session = Depends(get_db)):
     return db.query(Trip).all()
 
 
+@router.get("/{trip_id}", response_model=TripResponse)
+def get_trip(trip_id: int, db: Session = Depends(get_db)):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if trip is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found",
+        )
+
+    return trip
+
+
 @router.post("/start", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
 def start_trip(trip_data: TripStart, db: Session = Depends(get_db)):
     trip = Trip(

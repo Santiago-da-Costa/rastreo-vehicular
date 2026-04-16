@@ -7,9 +7,22 @@ y dar enter
 
 
 
-Activar servidor:
+Activar servidor para BACKEND:
+
 Dentro de C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\backend>
 
 uvicorn app.main:app --reload
+
+y dar enter
+
+
+
+Activar servidor para FRONTED:
+
+Dentro de C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\fronted
+
+cd C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\frontend
+>> python -m http.server 5500
+
 
 y dar enter
