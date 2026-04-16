@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de recorrido - Rastreo Vehicular</title>
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIINfQngLA5dLk2r5Q7cc5aGq8wh5n4nKXk="
+        crossorigin=""
+    >
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #eef2f5;
+            color: #1f2933;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: end;
+            gap: 12px;
+            padding: 16px;
+            background: #ffffff;
+            border-bottom: 1px solid #d7dde3;
+        }
+
+        .field {
+            display: grid;
+            gap: 6px;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        input {
+            width: 180px;
+            border: 1px solid #c5ccd3;
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 6px;
+            background: #1d7a8c;
+            color: #ffffff;
+            cursor: pointer;
+            padding: 11px 16px;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+
+        .message {
+            min-height: 20px;
+            color: #3c4856;
+        }
+
+        .message.error {
+            color: #b42318;
+        }
+
+        #map {
+            width: 100%;
+            height: 80vh;
+        }
+
+        @media (max-width: 560px) {
+            .toolbar {
+                align-items: stretch;
+            }
+
+            .field,
+            input,
+            button,
+            .message {
+                width: 100%;
+            }
+
+            #map {
+                height: 75vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <form class="toolbar" id="trip-form">
+        <div class="field">
+            <label for="trip-id">Trip ID</label>
+            <input id="trip-id" name="trip-id" type="number" min="1" required>
+        </div>
+        <button id="load-button" type="submit">Cargar recorrido</button>
+        <div class="message" id="message" aria-live="polite"></div>
+    </form>
+
+    <div id="map"></div>
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
+    <script>
+        const apiBaseUrl = "http://127.0.0.1:8000";
+        const form = document.getElementById("trip-form");
+        const tripIdInput = document.getElementById("trip-id");
+        const loadButton = document.getElementById("load-button");
+        const message = document.getElementById("message");
+
+        const map = L.map("map").setView([-34.9011, -56.1645], 12);
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 100);
+
+        let pointLayer = L.layerGroup().addTo(map);
+        let routeLine = null;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            crossOrigin: true
+        }).addTo(map);
+
+        function setMessage(text, isError = false) {
+            message.textContent = text;
+            message.classList.toggle("error", isError);
+        }
+
+        function clearMap() {
+            pointLayer.clearLayers();
+
+            if (routeLine) {
+                map.removeLayer(routeLine);
+                routeLine = null;
+            }
+        }
+
+        function drawPoints(points) {
+            clearMap();
+
+            const latLngs = points.map((point) => [point.latitude, point.longitude]);
+
+            points.forEach((point, index) => {
+                const isStart = index === 0;
+                const isEnd = index === points.length - 1 && points.length > 1;
+                const markerColor = isStart ? "#16a34a" : isEnd ? "#dc2626" : "#2563eb";
+                const marker = L.circleMarker([point.latitude, point.longitude], {
+                    radius: isStart || isEnd ? 7 : 4,
+                    color: markerColor,
+                    fillColor: markerColor,
+                    fillOpacity: isStart || isEnd ? 0.95 : 0.45,
+                    opacity: isStart || isEnd ? 1 : 0.65,
+                    weight: isStart || isEnd ? 2 : 1
+                });
+                marker.bindPopup(
+                    [
+                        `Punto ${point.id}`,
+                        `Fecha: ${point.timestamp}`,
+                        point.speed != null ? `Velocidad: ${point.speed}` : null,
+                        point.accuracy != null ? `Precision: ${point.accuracy}` : null
+                    ].filter(Boolean).join("<br>")
+                );
+                marker.addTo(pointLayer);
+            });
+
+            routeLine = L.polyline(latLngs, {
+                color: "#0057ff",
+                weight: 5
+            }).addTo(map);
+
+            if (latLngs.length === 1) {
+                map.setView(latLngs[0], 17);
+            } else {
+                map.fitBounds(routeLine.getBounds(), {
+                    padding: [32, 32],
+                    maxZoom: 17
+                });
+            }
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const tripId = tripIdInput.value.trim();
+            if (!tripId) {
+                setMessage("Escribi un trip_id para cargar el recorrido.", true);
+                return;
+            }
+
+            loadButton.disabled = true;
+            setMessage("Cargando recorrido...");
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/trips/${tripId}/points`);
+
+                if (!response.ok) {
+                    throw new Error(`Error ${response.status}`);
+                }
+
+                const points = await response.json();
+
+                if (!points.length) {
+                    clearMap();
+                    setMessage("No hay puntos para este recorrido.");
+                    return;
+                }
+
+                drawPoints(points);
+                setMessage(`Recorrido cargado: ${points.length} punto(s).`);
+            } catch (error) {
+                clearMap();
+                setMessage("No se pudo cargar el recorrido. Revisa que el backend este corriendo y que el trip_id exista.", true);
+            } finally {
+                loadButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
