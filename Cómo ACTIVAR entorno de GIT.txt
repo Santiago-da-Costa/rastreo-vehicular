@@ -3,3 +3,13 @@ Escribir en terminal:
 git init
 
 y dar enter
+
+
+
+
+Activar servidor:
+Dentro de C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\backend>
+
+uvicorn app.main:app --reload
+
+y dar enter
