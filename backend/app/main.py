@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 
-app = FastAPI(
-    title="Rastreo Vehicular API",
-    description="Backend inicial para un sistema de rastreo vehicular.",
-    version="0.1.0",
-)
+from app.routes import vehicles
+
+app = FastAPI(title="Sistema de Rastreo Vehicular")
+
+app.include_router(vehicles.router)
 
 
 @app.get("/")
-def read_root():
+def root():
     return {"message": "Backend funcionando correctamente"}
