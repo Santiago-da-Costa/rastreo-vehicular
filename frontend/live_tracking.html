@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seguimiento en vivo - Rastreo Vehicular</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f7f9;
+            color: #1f2933;
+        }
+
+        main {
+            width: min(100%, 560px);
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            margin: 0 0 18px;
+            font-size: 28px;
+            line-height: 1.2;
+        }
+
+        .field {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        input,
+        select {
+            width: 100%;
+            border: 1px solid #c5ccd3;
+            border-radius: 6px;
+            padding: 14px;
+            font-size: 18px;
+            background: #ffffff;
+            color: #1f2933;
+        }
+
+        .actions {
+            display: grid;
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        button {
+            width: 100%;
+            border: 0;
+            border-radius: 6px;
+            padding: 16px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffffff;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+
+        #start-button {
+            background: #1d7a8c;
+        }
+
+        #stop-button {
+            background: #b42318;
+        }
+
+        .status {
+            border: 1px solid #d7dde3;
+            border-radius: 8px;
+            padding: 16px;
+            background: #ffffff;
+            line-height: 1.55;
+        }
+
+        .status-message {
+            margin: 0 0 14px;
+            font-weight: bold;
+            color: #3c4856;
+        }
+
+        .status-message.error {
+            color: #b42318;
+        }
+
+        .status-message.success {
+            color: #16794c;
+        }
+
+        .data-list {
+            display: grid;
+            gap: 8px;
+            margin: 0;
+        }
+
+        .data-row {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 8px;
+        }
+
+        .data-label {
+            font-weight: bold;
+        }
+
+        .data-value {
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 420px) {
+            main {
+                padding: 16px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .data-row {
+                grid-template-columns: 1fr;
+                gap: 2px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Seguimiento en vivo</h1>
+
+        <form id="tracking-form">
+            <div class="field">
+                <label for="vehicle-id">Vehicle ID</label>
+                <input id="vehicle-id" name="vehicle-id" type="number" min="1" inputmode="numeric" required>
+            </div>
+
+            <div class="field">
+                <label for="category">Categor&iacute;a</label>
+                <select id="category" name="category" required>
+                    <option value="">Seleccionar categor&iacute;a</option>
+                    <option value="trabajo">trabajo</option>
+                    <option value="obligaciones familiares">obligaciones familiares</option>
+                    <option value="ocio">ocio</option>
+                </select>
+            </div>
+
+            <div class="actions">
+                <button id="start-button" type="submit">Iniciar seguimiento</button>
+                <button id="stop-button" type="button" disabled>Detener seguimiento</button>
+            </div>
+        </form>
+
+        <section class="status" aria-live="polite">
+            <p class="status-message" id="status-message">Sin seguimiento activo.</p>
+            <dl class="data-list">
+                <div class="data-row">
+                    <dt class="data-label">Estado</dt>
+                    <dd class="data-value" id="tracking-status">Detenido</dd>
+                </div>
+                <div class="data-row">
+                    <dt class="data-label">Trip ID</dt>
+                    <dd class="data-value" id="current-trip-id">Sin dato</dd>
+                </div>
+                <div class="data-row">
+                    <dt class="data-label">Latitud</dt>
+                    <dd class="data-value" id="last-latitude">Sin dato</dd>
+                </div>
+                <div class="data-row">
+                    <dt class="data-label">Longitud</dt>
+                    <dd class="data-value" id="last-longitude">Sin dato</dd>
+                </div>
+                <div class="data-row">
+                    <dt class="data-label">Precisi&oacute;n</dt>
+                    <dd class="data-value" id="last-accuracy">Sin dato</dd>
+                </div>
+                <div class="data-row">
+                    <dt class="data-label">Velocidad</dt>
+                    <dd class="data-value" id="last-speed">Sin dato</dd>
+                </div>
+            </dl>
+        </section>
+    </main>
+
+    <script>
+        const apiBaseUrl = window.location.origin;
+
+        const trackingForm = document.getElementById("tracking-form");
+        const vehicleIdInput = document.getElementById("vehicle-id");
+        const categorySelect = document.getElementById("category");
+        const startButton = document.getElementById("start-button");
+        const stopButton = document.getElementById("stop-button");
+        const statusMessage = document.getElementById("status-message");
+        const trackingStatus = document.getElementById("tracking-status");
+        const currentTripId = document.getElementById("current-trip-id");
+        const lastLatitude = document.getElementById("last-latitude");
+        const lastLongitude = document.getElementById("last-longitude");
+        const lastAccuracy = document.getElementById("last-accuracy");
+        const lastSpeed = document.getElementById("last-speed");
+
+        let tripId = null;
+        let watchId = null;
+        let isTracking = false;
+
+        function setMessage(text, type = "normal") {
+            statusMessage.textContent = text;
+            statusMessage.classList.toggle("error", type === "error");
+            statusMessage.classList.toggle("success", type === "success");
+        }
+
+        function formatValue(value, suffix = "") {
+            if (value === null || value === undefined || value === "") {
+                return "Sin dato";
+            }
+
+            return `${value}${suffix}`;
+        }
+
+        function updateControls() {
+            startButton.disabled = isTracking;
+            stopButton.disabled = !isTracking && !tripId;
+            vehicleIdInput.disabled = isTracking;
+            categorySelect.disabled = isTracking;
+            trackingStatus.textContent = isTracking ? "Siguiendo" : "Detenido";
+            currentTripId.textContent = formatValue(tripId);
+        }
+
+        function getJsonHeaders() {
+            return {
+                "Content-Type": "application/json"
+            };
+        }
+
+        async function postJson(url, body) {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: getJsonHeaders(),
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        function updatePositionDisplay(point) {
+            const { latitude, longitude, accuracy, speed } = point;
+
+            lastLatitude.textContent = formatValue(latitude);
+            lastLongitude.textContent = formatValue(longitude);
+            lastAccuracy.textContent = formatValue(accuracy, " m");
+            lastSpeed.textContent = formatValue(speed, " m/s");
+        }
+
+        async function sendPoint(position) {
+            if (!tripId) {
+                return;
+            }
+
+            const coords = position.coords;
+            const pointBody = {
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                timestamp: new Date().toISOString(),
+                accuracy: coords.accuracy ?? null,
+                speed: coords.speed ?? null
+            };
+
+            updatePositionDisplay(pointBody);
+
+            try {
+                await postJson(`${apiBaseUrl}/trips/${tripId}/points`, pointBody);
+                setMessage("Seguimiento activo. Ultimo punto enviado correctamente.", "success");
+            } catch (error) {
+                setMessage("No se pudo enviar el punto al backend. Revisa la conexion y que el backend este corriendo.", "error");
+            }
+        }
+
+        async function handleGeolocationError(error) {
+            const messages = {
+                1: "Permiso de ubicacion denegado. Activa la ubicacion del navegador para continuar.",
+                2: "No se pudo obtener la ubicacion actual.",
+                3: "La ubicacion demoro demasiado en responder."
+            };
+
+            const errorMessage = messages[error.code] || "Error de ubicacion desconocido.";
+            const tripIdToStop = tripId;
+
+            setMessage(errorMessage, "error");
+
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+
+            isTracking = false;
+            updateControls();
+
+            if (!tripIdToStop) {
+                return;
+            }
+
+            try {
+                await postJson(`${apiBaseUrl}/trips/${tripIdToStop}/stop`, {});
+                tripId = null;
+                updateControls();
+                setMessage(`${errorMessage} Recorrido ${tripIdToStop} cerrado automaticamente.`, "error");
+            } catch (stopError) {
+                tripId = null;
+                updateControls();
+                setMessage(`${errorMessage} No se pudo cerrar automaticamente el recorrido ${tripIdToStop}.`, "error");
+            }
+        }
+
+        async function startTracking() {
+            const vehicleId = vehicleIdInput.value.trim();
+            const categoria = categorySelect.value;
+
+            if (!vehicleId) {
+                setMessage("Ingresa un vehicle_id antes de iniciar.", "error");
+                return;
+            }
+
+            if (!categoria) {
+                setMessage("Selecciona una categoria antes de iniciar.", "error");
+                return;
+            }
+
+            if (!navigator.geolocation) {
+                setMessage("Este navegador no soporta geolocalizacion.", "error");
+                return;
+            }
+
+            startButton.disabled = true;
+            setMessage("Iniciando recorrido...");
+
+            try {
+                const trip = await postJson(`${apiBaseUrl}/trips/start`, {
+                    vehicle_id: Number(vehicleId),
+                    categoria
+                });
+
+                tripId = trip.id;
+                isTracking = true;
+                updateControls();
+                setMessage("Recorrido iniciado. Esperando la primera posicion GPS...", "success");
+
+                watchId = navigator.geolocation.watchPosition(
+                    sendPoint,
+                    handleGeolocationError,
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 15000
+                    }
+                );
+            } catch (error) {
+                tripId = null;
+                isTracking = false;
+                updateControls();
+                setMessage("No se pudo iniciar el recorrido. Revisa la conexion con el backend.", "error");
+            }
+        }
+
+        async function stopTracking() {
+            const tripIdToStop = tripId;
+
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+
+            isTracking = false;
+            updateControls();
+
+            if (!tripIdToStop) {
+                setMessage("No hay un recorrido activo para detener.");
+                return;
+            }
+
+            stopButton.disabled = true;
+            setMessage("Deteniendo recorrido...");
+
+            try {
+                await postJson(`${apiBaseUrl}/trips/${tripIdToStop}/stop`, {});
+                tripId = null;
+                updateControls();
+                setMessage(`Recorrido ${tripIdToStop} detenido correctamente.`, "success");
+            } catch (error) {
+                tripId = tripIdToStop;
+                updateControls();
+                setMessage("Se detuvo el GPS, pero no se pudo cerrar el recorrido en el backend.", "error");
+            }
+        }
+
+        trackingForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            startTracking();
+        });
+
+        stopButton.addEventListener("click", () => {
+            stopTracking();
+        });
+
+        updateControls();
+    </script>
+</body>
+</html>

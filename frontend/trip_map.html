@@ -144,7 +144,7 @@
         crossorigin=""
     ></script>
     <script>
-        const apiBaseUrl = "http://127.0.0.1:8000";
+        const apiBaseUrl = window.location.origin;
         const form = document.getElementById("trip-form");
         const tripIdInput = document.getElementById("trip-id");
         const loadButton = document.getElementById("load-button");

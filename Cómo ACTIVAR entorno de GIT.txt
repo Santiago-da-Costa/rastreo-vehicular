@@ -26,3 +26,9 @@ cd C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\frontend
 
 
 y dar enter
+
+
+Respaldar cambios en GIT:
+
+git add .
+git commit -m "mejoras de trips y replay en mapa"

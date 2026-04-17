@@ -20,4 +20,10 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+Para probar desde un celular en la misma red Wi-Fi, levantar el backend escuchando en toda la red local:
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
 El endpoint inicial responde en `GET /` con un mensaje de estado.
