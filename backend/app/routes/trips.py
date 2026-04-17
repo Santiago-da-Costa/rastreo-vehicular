@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.trip import Trip
-from app.schemas.trips import TripResponse, TripStart, TripStopResponse
+from app.schemas.trips import TripCategoryUpdate, TripResponse, TripStart, TripStopResponse
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -24,6 +24,37 @@ def get_trip(trip_id: int, db: Session = Depends(get_db)):
             detail="Trip not found",
         )
 
+    return trip
+
+
+@router.patch("/{trip_id}/category", response_model=TripResponse)
+def update_trip_category(
+    trip_id: int,
+    category_data: TripCategoryUpdate,
+    db: Session = Depends(get_db),
+):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if trip is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found",
+        )
+
+    categoria = category_data.categoria.strip()
+    if not categoria:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category cannot be empty",
+        )
+    if len(categoria) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category cannot exceed 50 characters",
+        )
+
+    trip.categoria = categoria
+    db.commit()
+    db.refresh(trip)
     return trip
 
 

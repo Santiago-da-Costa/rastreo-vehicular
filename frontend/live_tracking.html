@@ -210,9 +210,20 @@
         const lastAccuracy = document.getElementById("last-accuracy");
         const lastSpeed = document.getElementById("last-speed");
 
+        const maxAllowedAccuracyMeters = 20;
+        const minSecondsBetweenPoints = 5;
+        const minDistanceBetweenPointsMeters = 5;
+        const geolocationErrorCodes = {
+            permissionDenied: 1,
+            positionUnavailable: 2,
+            timeout: 3
+        };
+
         let tripId = null;
         let watchId = null;
         let isTracking = false;
+        let lastSentPoint = null;
+        let lastSentAt = null;
 
         function setMessage(text, type = "normal") {
             statusMessage.textContent = text;
@@ -257,6 +268,22 @@
             return response.json();
         }
 
+        function calculateDistanceMeters(firstPoint, secondPoint) {
+            const earthRadiusMeters = 6371000;
+            const degreesToRadians = Math.PI / 180;
+            const firstLatitude = firstPoint.latitude * degreesToRadians;
+            const secondLatitude = secondPoint.latitude * degreesToRadians;
+            const deltaLatitude = (secondPoint.latitude - firstPoint.latitude) * degreesToRadians;
+            const deltaLongitude = (secondPoint.longitude - firstPoint.longitude) * degreesToRadians;
+
+            const a = Math.sin(deltaLatitude / 2) * Math.sin(deltaLatitude / 2)
+                + Math.cos(firstLatitude) * Math.cos(secondLatitude)
+                * Math.sin(deltaLongitude / 2) * Math.sin(deltaLongitude / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return earthRadiusMeters * c;
+        }
+
         function updatePositionDisplay(point) {
             const { latitude, longitude, accuracy, speed } = point;
 
@@ -282,8 +309,35 @@
 
             updatePositionDisplay(pointBody);
 
+            if (pointBody.accuracy === null || pointBody.accuracy > maxAllowedAccuracyMeters) {
+                setMessage(`Punto descartado por precision (${formatValue(pointBody.accuracy, " m")}).`, "error");
+                return;
+            }
+
+            const now = Date.now();
+
+            if (lastSentAt !== null) {
+                const secondsSinceLastPoint = (now - lastSentAt) / 1000;
+
+                if (secondsSinceLastPoint < minSecondsBetweenPoints) {
+                    setMessage(`Punto descartado por tiempo minimo (${secondsSinceLastPoint.toFixed(1)} s).`, "error");
+                    return;
+                }
+            }
+
+            if (lastSentPoint !== null) {
+                const distanceMeters = calculateDistanceMeters(lastSentPoint, pointBody);
+
+                if (distanceMeters < minDistanceBetweenPointsMeters) {
+                    setMessage(`Punto descartado por distancia minima (${distanceMeters.toFixed(1)} m).`, "error");
+                    return;
+                }
+            }
+
             try {
                 await postJson(`${apiBaseUrl}/trips/${tripId}/points`, pointBody);
+                lastSentPoint = pointBody;
+                lastSentAt = now;
                 setMessage("Seguimiento activo. Ultimo punto enviado correctamente.", "success");
             } catch (error) {
                 setMessage("No se pudo enviar el punto al backend. Revisa la conexion y que el backend este corriendo.", "error");
@@ -291,39 +345,51 @@
         }
 
         async function handleGeolocationError(error) {
-            const messages = {
-                1: "Permiso de ubicacion denegado. Activa la ubicacion del navegador para continuar.",
-                2: "No se pudo obtener la ubicacion actual.",
-                3: "La ubicacion demoro demasiado en responder."
-            };
+            if (error.code === geolocationErrorCodes.permissionDenied) {
+                const errorMessage = "Permiso de ubicacion denegado. Activa la ubicacion del navegador para continuar.";
+                const tripIdToStop = tripId;
 
-            const errorMessage = messages[error.code] || "Error de ubicacion desconocido.";
-            const tripIdToStop = tripId;
+                setMessage(errorMessage, "error");
 
-            setMessage(errorMessage, "error");
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
 
-            if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId);
-                watchId = null;
-            }
+                isTracking = false;
+                lastSentPoint = null;
+                lastSentAt = null;
+                updateControls();
 
-            isTracking = false;
-            updateControls();
+                if (!tripIdToStop) {
+                    return;
+                }
 
-            if (!tripIdToStop) {
+                try {
+                    await postJson(`${apiBaseUrl}/trips/${tripIdToStop}/stop`, {});
+                    tripId = null;
+                    updateControls();
+                    setMessage(`${errorMessage} Recorrido ${tripIdToStop} cerrado automaticamente.`, "error");
+                } catch (stopError) {
+                    tripId = null;
+                    updateControls();
+                    setMessage(`${errorMessage} No se pudo cerrar automaticamente el recorrido ${tripIdToStop}.`, "error");
+                }
+
                 return;
             }
 
-            try {
-                await postJson(`${apiBaseUrl}/trips/${tripIdToStop}/stop`, {});
-                tripId = null;
-                updateControls();
-                setMessage(`${errorMessage} Recorrido ${tripIdToStop} cerrado automaticamente.`, "error");
-            } catch (stopError) {
-                tripId = null;
-                updateControls();
-                setMessage(`${errorMessage} No se pudo cerrar automaticamente el recorrido ${tripIdToStop}.`, "error");
+            if (error.code === geolocationErrorCodes.positionUnavailable) {
+                setMessage("Posicion GPS no disponible por el momento. El seguimiento sigue activo y se reintentara automaticamente.", "error");
+                return;
             }
+
+            if (error.code === geolocationErrorCodes.timeout) {
+                setMessage("Timeout obteniendo GPS. El seguimiento sigue activo y se reintentara automaticamente.", "error");
+                return;
+            }
+
+            setMessage("Error de ubicacion desconocido. El seguimiento sigue activo y se reintentara automaticamente.", "error");
         }
 
         async function startTracking() {
@@ -356,6 +422,8 @@
 
                 tripId = trip.id;
                 isTracking = true;
+                lastSentPoint = null;
+                lastSentAt = null;
                 updateControls();
                 setMessage("Recorrido iniciado. Esperando la primera posicion GPS...", "success");
 
@@ -385,6 +453,8 @@
             }
 
             isTracking = false;
+            lastSentPoint = null;
+            lastSentAt = null;
             updateControls();
 
             if (!tripIdToStop) {

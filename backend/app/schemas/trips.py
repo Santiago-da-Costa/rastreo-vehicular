@@ -8,6 +8,10 @@ class TripStart(BaseModel):
     categoria: str
 
 
+class TripCategoryUpdate(BaseModel):
+    categoria: str
+
+
 class TripResponse(BaseModel):
     id: int
     vehicle_id: int

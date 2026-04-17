@@ -20,36 +20,30 @@
             color: #1f2933;
         }
 
-        .toolbar {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: end;
-            gap: 12px;
-            padding: 16px;
-            background: #ffffff;
-            border-bottom: 1px solid #d7dde3;
-        }
-
         .field {
             display: grid;
-            gap: 6px;
+            gap: 5px;
         }
 
         label {
             font-weight: bold;
+            font-size: 0.88rem;
         }
 
-        input {
-            width: 180px;
+        input,
+        select {
+            width: 100%;
             border: 1px solid #c5ccd3;
             border-radius: 6px;
-            padding: 10px;
+            padding: 8px;
+            background: #ffffff;
+            font-size: 0.88rem;
         }
 
         .checkbox-field {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             font-weight: normal;
         }
 
@@ -63,7 +57,9 @@
             background: #1d7a8c;
             color: #ffffff;
             cursor: pointer;
-            padding: 11px 16px;
+            padding: 8px 12px;
+            min-width: 0;
+            font-size: 0.88rem;
         }
 
         button:disabled {
@@ -81,95 +77,370 @@
         }
 
         .trip-summary {
-            display: none;
-            padding: 12px 16px;
-            background: #ffffff;
-            border-bottom: 1px solid #d7dde3;
+            display: block;
+            padding: 8px;
+            background: #f8fafc;
+            border: 1px solid #d7dde3;
+            border-radius: 6px;
             color: #3c4856;
-            line-height: 1.5;
+            font-size: 0.725rem;
+            line-height: 1.35;
         }
 
-        .trip-summary.visible {
-            display: block;
+        .trip-summary-title {
+            margin: 0 0 5px;
+            color: #1f2933;
+            font-size: 0.825rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .trip-summary-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 3px 6px;
+        }
+
+        .trip-summary-label {
+            color: #52616f;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .trip-summary-empty {
+            margin: 0;
+            color: #52616f;
+        }
+
+        .trip-category-actions,
+        .trip-category-edit-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .trip-category-edit-form {
+            display: grid;
+            gap: 6px;
+        }
+
+        .trip-summary-button {
+            padding: 4px 8px;
+            font-size: 0.72rem;
+        }
+
+        .trip-category-input {
+            padding: 6px;
+            font-size: 0.78rem;
+        }
+
+        .map-layout {
+            display: flex;
+            height: 100vh;
+            min-height: 620px;
+        }
+
+        .trips-panel {
+            width: 320px;
+            max-width: 38vw;
+            background: #ffffff;
+            border-right: 1px solid #d7dde3;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .trips-panel-header {
+            padding: 12px;
+            border-bottom: 1px solid #d7dde3;
+        }
+
+        .trips-panel-title {
+            margin: 0 0 3px;
+            font-size: 14px;
+        }
+
+        .trips-panel-help {
+            margin: 0;
+            color: #52616f;
+            font-size: 11px;
+        }
+
+        .map-content {
+            flex: 1;
+            min-width: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
         }
 
         #map {
-            width: 100%;
-            height: 80vh;
+            flex: 1 1 auto;
+            min-height: 360px;
+        }
+
+        .speed-chart-panel {
+            background: #ffffff;
+            border-top: 1px solid #d7dde3;
+            padding: 12px 16px 14px;
+        }
+
+        .speed-chart-title {
+            margin: 0 0 8px;
+            color: #1f2933;
+            font-size: 14px;
+        }
+
+        .speed-chart-box {
+            position: relative;
+            height: 230px;
+        }
+
+        .speed-chart-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            color: #52616f;
+            text-align: center;
+            font-size: 0.88rem;
+        }
+
+        .sidebar-form {
+            display: grid;
+            gap: 12px;
+            padding: 12px;
+        }
+
+        .control-group {
+            display: grid;
+            gap: 8px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .control-group:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .control-group-title {
+            margin: 0;
+            font-size: 10px;
+            font-weight: bold;
+            color: #52616f;
+            text-transform: uppercase;
+        }
+
+        .button-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+
+        .button-stack {
+            display: grid;
+            gap: 6px;
+        }
+
+        .secondary-button {
+            background: #3c4856;
+        }
+
+        .hidden-control {
+            display: none;
         }
 
         @media (max-width: 560px) {
-            .toolbar {
-                align-items: stretch;
-            }
-
             .field,
             input,
+            select,
             button,
             .checkbox-field,
             .message {
                 width: 100%;
             }
 
+            .map-layout {
+                display: block;
+                height: auto;
+                min-height: 0;
+            }
+
+            .trips-panel {
+                width: 100%;
+                max-width: none;
+                border-right: 0;
+                border-bottom: 1px solid #d7dde3;
+            }
+
             #map {
                 height: 75vh;
+                min-height: 360px;
+            }
+
+            .speed-chart-panel {
+                padding: 12px;
+            }
+
+            .speed-chart-box {
+                height: 240px;
             }
         }
     </style>
 </head>
 <body>
-    <form class="toolbar" id="trip-form">
-        <div class="field">
-            <label for="trip-id">Trip ID</label>
-            <input id="trip-id" name="trip-id" type="number" min="1" required>
-        </div>
-        <button id="load-button" type="submit">Cargar recorrido</button>
-        <button id="load-trip-button" type="button">Cargar datos del trip</button>
-        <button id="center-route-button" type="button">Centrar recorrido</button>
-        <button id="replay-button" type="button">Reproducir recorrido</button>
-        <button id="stop-replay-button" type="button">Detener replay</button>
-        <label class="checkbox-field" for="auto-refresh">
-            <input id="auto-refresh" type="checkbox">
-            Actualizar automáticamente
-        </label>
-        <div class="message" id="message" aria-live="polite"></div>
-    </form>
+    <main class="map-layout">
+        <aside class="trips-panel" aria-label="Controles de recorridos">
+            <div class="trips-panel-header">
+                <h2 class="trips-panel-title">Recorridos</h2>
+                <p class="trips-panel-help">Filtra, selecciona y reproduce recorridos.</p>
+            </div>
+            <form class="sidebar-form" id="trip-form">
+                <section class="control-group" aria-labelledby="vehicle-filter-title">
+                    <h3 class="control-group-title" id="vehicle-filter-title">Selección de vehículo</h3>
+                    <div class="field">
+                        <label for="vehicle-select">Vehículo</label>
+                        <select id="vehicle-select" name="vehicle-select">
+                            <option value="">Ver todos</option>
+                        </select>
+                    </div>
+                </section>
 
-    <div class="trip-summary" id="trip-summary" aria-live="polite"></div>
-    <div id="map"></div>
+                <section class="control-group" aria-labelledby="period-filter-title">
+                    <h3 class="control-group-title" id="period-filter-title">Selección de período</h3>
+                    <div class="field">
+                        <label for="filter-start">Inicio</label>
+                        <input id="filter-start" name="filter-start" type="datetime-local">
+                    </div>
+                    <div class="field">
+                        <label for="filter-end">Fin</label>
+                        <input id="filter-end" name="filter-end" type="datetime-local">
+                    </div>
+                    <button id="load-all-button" class="secondary-button" type="button">Ver todo</button>
+                </section>
 
+                <section class="control-group" aria-labelledby="trip-filter-title">
+                    <h3 class="control-group-title" id="trip-filter-title">Lista de recorridos</h3>
+                    <div class="field">
+                        <label for="trip-select">Recorrido</label>
+                        <select id="trip-select" name="trip-select">
+                            <option value="">Ver todos</option>
+                        </select>
+                    </div>
+                    <input id="trip-id" class="hidden-control" name="trip-id" type="number" min="1">
+                    <button id="load-button" class="hidden-control" type="submit">Cargar recorrido</button>
+                    <button id="load-trip-button" class="hidden-control" type="button">Cargar datos del trip</button>
+                    <div class="trip-summary" id="trip-summary" aria-live="polite"></div>
+                </section>
+
+                <section class="control-group" aria-labelledby="replay-title">
+                    <h3 class="control-group-title" id="replay-title">Replay del recorrido</h3>
+                    <div class="button-row">
+                        <button id="replay-button" type="button">Play</button>
+                        <button id="pause-replay-button" class="secondary-button" type="button">Pause</button>
+                        <button id="stop-replay-button" class="secondary-button" type="button">Stop</button>
+                    </div>
+                </section>
+
+                <section class="control-group">
+                    <button id="center-route-button" type="button">Centrar recorrido</button>
+                </section>
+
+                <section class="control-group">
+                    <div class="button-stack">
+                        <button id="apply-filter-button" type="button">Aplicar filtros</button>
+                        <button id="clear-filter-button" class="secondary-button" type="button">Limpiar filtros</button>
+                    </div>
+                </section>
+
+                <section class="control-group">
+                    <label class="checkbox-field" for="auto-refresh">
+                        <input id="auto-refresh" type="checkbox">
+                        Actualizar automáticamente
+                    </label>
+                    <div class="message" id="message" aria-live="polite"></div>
+                </section>
+            </form>
+        </aside>
+        <section class="map-content" aria-label="Mapa y analisis del recorrido">
+            <div id="map"></div>
+            <section class="speed-chart-panel" aria-labelledby="speed-chart-title">
+                <h3 class="speed-chart-title" id="speed-chart-title">Velocidad vs distancia</h3>
+                <div class="speed-chart-box">
+                    <canvas id="speed-distance-chart"></canvas>
+                    <p class="speed-chart-empty" id="speed-chart-empty">Selecciona un recorrido para ver el grafico.</p>
+                </div>
+            </section>
+        </section>
+    </main>
     <script
         src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""
     ></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
     <script>
         const apiBaseUrl = window.location.origin;
         const form = document.getElementById("trip-form");
+        const vehicleSelect = document.getElementById("vehicle-select");
+        const filterStartInput = document.getElementById("filter-start");
+        const filterEndInput = document.getElementById("filter-end");
+        const applyFilterButton = document.getElementById("apply-filter-button");
+        const clearFilterButton = document.getElementById("clear-filter-button");
+        const loadAllButton = document.getElementById("load-all-button");
+        const tripSelect = document.getElementById("trip-select");
         const tripIdInput = document.getElementById("trip-id");
         const loadButton = document.getElementById("load-button");
         const loadTripButton = document.getElementById("load-trip-button");
         const centerRouteButton = document.getElementById("center-route-button");
         const replayButton = document.getElementById("replay-button");
+        const pauseReplayButton = document.getElementById("pause-replay-button");
         const stopReplayButton = document.getElementById("stop-replay-button");
         const autoRefreshInput = document.getElementById("auto-refresh");
         const message = document.getElementById("message");
         const tripSummary = document.getElementById("trip-summary");
+        const speedDistanceCanvas = document.getElementById("speed-distance-chart");
+        const speedChartEmpty = document.getElementById("speed-chart-empty");
 
         const map = L.map("map").setView([-34.9011, -56.1645], 12);
         setTimeout(() => {
             map.invalidateSize();
         }, 100);
 
+        const routePaneName = "route-pane";
+        const pointPaneName = "point-pane";
+        map.createPane(routePaneName);
+        map.createPane(pointPaneName);
+        map.getPane(routePaneName).style.zIndex = 410;
+        map.getPane(pointPaneName).style.zIndex = 420;
+
         let pointLayer = L.layerGroup().addTo(map);
         let routeLine = null;
         let replayLine = null;
         let replayMarker = null;
         let replayTimer = null;
+        let replayPoints = [];
+        let replayIndex = 0;
+        let replayPaused = false;
         let autoRefreshTimer = null;
         let currentPoints = [];
         let currentTrip = null;
+        let currentTrips = [];
+        let allTripsCache = [];
         let currentTripId = null;
+        let currentRouteSegments = [];
+        let currentTripsWithPoints = [];
+        let currentMode = "all";
+        let selectedTripId = null;
+        let speedDistanceChart = null;
+        let speedChartPointRefs = [];
+        let chartMapHighlight = null;
+        let isCategoryEditMode = false;
+        const tripCategoryOptions = ["Trabajo", "Ocio", "Personal", "Otro"];
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
@@ -181,12 +452,30 @@
             message.classList.toggle("error", isError);
         }
 
-        function getTripCategory() {
-            return currentTrip && currentTrip.categoria ? currentTrip.categoria : "Sin dato";
+        function getTripCategory(point = null) {
+            const trip = point && point._trip ? point._trip : currentTrip;
+            return getTripClassification(trip);
         }
 
         function formatValue(value) {
             return value == null || value === "" ? "Sin dato" : value;
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function getTripClassification(trip) {
+            if (!trip) {
+                return "Sin dato";
+            }
+
+            return trip.categoria || trip.clasificacion || trip.classification || trip.category || "Sin dato";
         }
 
         function getPointLatLng(point) {
@@ -197,7 +486,7 @@
             return points.map(getPointLatLng);
         }
 
-        function calculateTotalDistance(points = currentPoints) {
+        function calculateSegmentDistance(points) {
             return getRouteLatLngs(points).reduce((total, latLng, index, latLngs) => {
                 if (index === 0) {
                     return total;
@@ -205,6 +494,16 @@
 
                 return total + latLngs[index - 1].distanceTo(latLng);
             }, 0);
+        }
+
+        function calculateTotalDistance(points = currentPoints) {
+            if (currentRouteSegments.length) {
+                return currentRouteSegments.reduce((total, segment) => {
+                    return total + calculateSegmentDistance(segment);
+                }, 0);
+            }
+
+            return calculateSegmentDistance(points);
         }
 
         function formatDistance(meters) {
@@ -219,23 +518,499 @@
             return `${(meters / 1000).toFixed(2)} km`;
         }
 
-        function renderTripSummary(trip) {
-            if (!trip && !currentPoints.length) {
-                tripSummary.classList.remove("visible");
-                tripSummary.innerHTML = "";
+        function calculateMaxSpeed(points) {
+            return points.reduce((maxSpeed, point) => {
+                const speed = Number(point.speed);
+
+                if (Number.isNaN(speed)) {
+                    return maxSpeed;
+                }
+
+                return maxSpeed == null ? speed : Math.max(maxSpeed, speed);
+            }, null);
+        }
+
+        function formatSpeedMetersPerSecond(speed) {
+            if (speed == null) {
+                return "Sin dato";
+            }
+
+            return `${(speed * 3.6).toFixed(1)} km/h`;
+        }
+
+        function formatDateTime(value) {
+            if (!value) {
+                return "Sin dato";
+            }
+
+            const date = new Date(value);
+
+            if (Number.isNaN(date.getTime())) {
+                return value;
+            }
+
+            return date.toLocaleString("es-UY", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        function getTripStartTime(trip) {
+            return trip ? trip.hora_inicio || trip.start_time : null;
+        }
+
+        function getTripEndTime(trip) {
+            return trip ? trip.hora_fin || trip.end_time : null;
+        }
+
+        function getTripVehicleId(trip) {
+            return trip ? trip.vehicle_id || trip.vehicleId || trip.vehiculo_id || trip.vehiculo : null;
+        }
+
+        function getPointTripId(point) {
+            if (point && point._trip) {
+                return point._trip.id;
+            }
+
+            return currentTripId;
+        }
+
+        function isSelectedTrip(tripId) {
+            return selectedTripId != null && String(selectedTripId) === String(tripId);
+        }
+
+        function getSelectedTripItem() {
+            if (selectedTripId == null) {
+                return null;
+            }
+
+            return currentTripsWithPoints.find(({ trip }) => {
+                return String(trip.id) === String(selectedTripId);
+            }) || null;
+        }
+
+        function getSelectedVehicleId() {
+            return vehicleSelect.value;
+        }
+
+        function tripMatchesVehicle(trip) {
+            const selectedVehicleId = getSelectedVehicleId();
+
+            if (!selectedVehicleId) {
+                return true;
+            }
+
+            return String(getTripVehicleId(trip)) === String(selectedVehicleId);
+        }
+
+        function populateVehicleSelect(trips) {
+            const selectedVehicleId = vehicleSelect.value;
+            const vehicleIds = [...new Set(trips.map(getTripVehicleId).filter((value) => value != null && value !== ""))]
+                .sort((a, b) => String(a).localeCompare(String(b), "es", { numeric: true }));
+
+            vehicleSelect.innerHTML = '<option value="">Ver todos</option>';
+            vehicleIds.forEach((vehicleId) => {
+                const option = document.createElement("option");
+                option.value = vehicleId;
+                option.textContent = `VehÃ­culo ${vehicleId}`;
+                vehicleSelect.appendChild(option);
+            });
+
+            if (vehicleIds.some((vehicleId) => String(vehicleId) === String(selectedVehicleId))) {
+                vehicleSelect.value = selectedVehicleId;
+            } else {
+                vehicleSelect.value = "";
+            }
+        }
+
+        function renderTripsList() {
+            const selectedValue = selectedTripId == null ? "" : String(selectedTripId);
+            tripSelect.innerHTML = '<option value="">Ver todos</option>';
+
+            if (!currentTripsWithPoints.length) {
+                tripSelect.disabled = true;
                 return;
             }
 
+            tripSelect.disabled = false;
+            currentTripsWithPoints.forEach(({ trip }) => {
+                const option = document.createElement("option");
+
+                option.value = trip.id;
+                option.textContent = formatValue(trip.id);
+                tripSelect.appendChild(option);
+            });
+
+            tripSelect.value = [...tripSelect.options].some((option) => option.value === selectedValue) ? selectedValue : "";
+        }
+
+        function getPointStyle(point, index, totalPoints) {
+            const isStart = index === 0;
+            const isEnd = index === totalPoints - 1 && totalPoints > 1;
+            const markerColor = isStart ? "#16a34a" : isEnd ? "#dc2626" : "#2563eb";
+            const selected = isSelectedTrip(getPointTripId(point));
+            const dimmed = selectedTripId != null && !selected;
+
+            return {
+                radius: selected ? (isStart || isEnd ? 9 : 6) : (isStart || isEnd ? 7 : 4),
+                color: markerColor,
+                fillColor: markerColor,
+                fillOpacity: dimmed ? 0.18 : (isStart || isEnd ? 0.95 : 0.45),
+                opacity: dimmed ? 0.25 : (isStart || isEnd ? 1 : 0.65),
+                weight: selected ? 3 : (isStart || isEnd ? 2 : 1),
+                pane: pointPaneName
+            };
+        }
+
+        function getLineStyle(segment) {
+            const tripId = segment.length ? getPointTripId(segment[0]) : null;
+            const selected = isSelectedTrip(tripId);
+            const dimmed = selectedTripId != null && !selected;
+
+            return {
+                color: selected ? "#f97316" : "#0057ff",
+                weight: selected ? 8 : 5,
+                opacity: dimmed ? 0.22 : 0.85,
+                pane: routePaneName
+            };
+        }
+
+        function getReplayPoints() {
+            const selectedItem = getSelectedTripItem();
+
+            if (selectedItem) {
+                return selectedItem.points;
+            }
+
+            return currentPoints;
+        }
+
+        function clearChartMapHighlight() {
+            if (chartMapHighlight) {
+                map.removeLayer(chartMapHighlight);
+                chartMapHighlight = null;
+            }
+        }
+
+        function highlightMapPointFromChart(point) {
+            if (!point) {
+                return;
+            }
+
+            clearChartMapHighlight();
+
+            const latLng = getPointLatLng(point);
+            chartMapHighlight = L.circleMarker(latLng, {
+                radius: 13,
+                color: "#111827",
+                fillColor: "#facc15",
+                fillOpacity: 0.45,
+                opacity: 1,
+                weight: 4,
+                interactive: false,
+                pane: pointPaneName
+            }).addTo(map);
+            chartMapHighlight.bringToFront();
+
+            const currentZoom = map.getZoom();
+            const mapMaxZoom = map.getMaxZoom();
+            const maxFocusZoom = Number.isFinite(mapMaxZoom) ? mapMaxZoom : 18;
+            const focusZoom = Math.min(Math.max(currentZoom, 17), maxFocusZoom);
+            map.setView(latLng, focusZoom, { animate: true });
+
+            if (point._mapMarker) {
+                point._mapMarker.openPopup();
+            }
+        }
+
+        function handleSpeedChartClick(event, activeElements = []) {
+            if (!speedDistanceChart) {
+                return;
+            }
+
+            const elements = activeElements.length
+                ? activeElements
+                : speedDistanceChart.getElementsAtEventForMode(
+                    event,
+                    "nearest",
+                    { intersect: true },
+                    true
+                );
+
+            if (!elements.length) {
+                return;
+            }
+
+            const point = speedChartPointRefs[elements[0].index];
+            highlightMapPointFromChart(point);
+        }
+
+        function selectTrip(tripId, fitMap = false) {
+            if (tripId == null) {
+                return;
+            }
+
+            if (selectedTripId == null || String(selectedTripId) !== String(tripId)) {
+                isCategoryEditMode = false;
+            }
+            selectedTripId = tripId;
+            tripIdInput.value = tripId;
+            tripSelect.value = String(tripId);
+            redrawCurrentMap();
+
+            if (fitMap) {
+                centerRoute();
+            }
+
+            setMessage(`Recorrido seleccionado: ${tripId}.`);
+        }
+
+        function clearSelectedTrip({ showMessage = true, fitMap = false } = {}) {
+            selectedTripId = null;
+            isCategoryEditMode = false;
+            tripIdInput.value = "";
+            tripSelect.value = "";
+            redrawCurrentMap();
+
+            if (fitMap && currentPoints.length) {
+                centerRoute();
+            }
+
+            if (showMessage) {
+                setMessage("Vista general de recorridos.");
+            }
+        }
+
+        function redrawCurrentMap() {
+            if (currentMode === "all") {
+                drawTrips(currentTripsWithPoints, false);
+            } else {
+                drawPoints(currentPoints, false);
+            }
+        }
+
+        function getFilterRange() {
+            const start = filterStartInput.value ? new Date(filterStartInput.value) : null;
+            const end = filterEndInput.value ? new Date(filterEndInput.value) : null;
+
+            if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) {
+                throw new Error("invalid-filter");
+            }
+
+            if (start && end && start > end) {
+                throw new Error("inverted-filter");
+            }
+
+            return { start, end };
+        }
+
+        function tripMatchesFilter(trip, range) {
+            const startValue = getTripStartTime(trip);
+            const tripStart = startValue ? new Date(startValue) : null;
+
+            if (!tripStart || Number.isNaN(tripStart.getTime())) {
+                return false;
+            }
+
+            if (range.start && tripStart < range.start) {
+                return false;
+            }
+
+            if (range.end && tripStart > range.end) {
+                return false;
+            }
+
+            return true;
+        }
+
+        function renderTripCategoryEditor(summaryTrip) {
+            const currentCategory = getTripClassification(summaryTrip);
+            const categoryValue = currentCategory === "Sin dato" ? "" : currentCategory;
+            const optionsHtml = tripCategoryOptions
+                .map((category) => `<option value="${escapeHtml(category)}"></option>`)
+                .join("");
+
+            if (isCategoryEditMode) {
+                return [
+                    '<form class="trip-category-edit-form" id="trip-category-form">',
+                    '<input class="trip-category-input" id="trip-category-input" name="categoria" list="trip-category-options" maxlength="50" autocomplete="off" required',
+                    ` value="${escapeHtml(categoryValue)}">`,
+                    `<datalist id="trip-category-options">${optionsHtml}</datalist>`,
+                    '<div class="trip-category-edit-actions">',
+                    '<button class="trip-summary-button" type="submit" data-category-action="save">Guardar</button>',
+                    '<button class="trip-summary-button secondary-button" type="button" data-category-action="cancel">Cancelar</button>',
+                    '</div>',
+                    '</form>'
+                ].join("");
+            }
+
+            return [
+                '<span class="trip-category-actions">',
+                `<span>${escapeHtml(formatValue(currentCategory))}</span>`,
+                '<button class="trip-summary-button secondary-button" type="button" data-category-action="edit">Editar</button>',
+                '</span>'
+            ].join("");
+        }
+
+        function renderTripSummary(trip) {
+            const selectedSummaryItem = getSelectedTripItem();
+            if (!selectedSummaryItem) {
+                isCategoryEditMode = false;
+            }
+
+            if (!selectedSummaryItem) {
+                tripSummary.innerHTML = '<p class="trip-summary-empty">Ningún recorrido seleccionado</p>';
+                clearSpeedDistanceChart("Selecciona un recorrido para ver el gráfico.");
+                return;
+            }
+
+            const { trip: summaryTrip, points: summaryPoints } = selectedSummaryItem;
+            const summaryOrderedPoints = getChronologicalPoints(summaryPoints);
+            const summaryStartTime = getTripStartTime(summaryTrip) || (summaryOrderedPoints[0] ? summaryOrderedPoints[0].timestamp : null);
+            const summaryEndTime = getTripEndTime(summaryTrip) || (summaryOrderedPoints.length ? summaryOrderedPoints[summaryOrderedPoints.length - 1].timestamp : null);
+
             tripSummary.innerHTML = [
-                `<strong>Trip ID:</strong> ${formatValue(trip ? trip.id : currentTripId)}`,
-                `<strong>Vehicle ID:</strong> ${formatValue(trip ? trip.vehicle_id : null)}`,
-                `<strong>Categoría:</strong> ${formatValue(trip ? trip.categoria : null)}`,
-                `<strong>Estado:</strong> ${formatValue(trip ? trip.estado || trip.status : null)}`,
-                `<strong>Hora de inicio:</strong> ${formatValue(trip ? trip.hora_inicio || trip.start_time : null)}`,
-                `<strong>Hora de fin:</strong> ${formatValue(trip ? trip.hora_fin || trip.end_time : null)}`,
-                `<strong>Distancia total:</strong> ${formatDistance(calculateTotalDistance())}`
-            ].join("<br>");
-            tripSummary.classList.add("visible");
+                '<p class="trip-summary-title">Recorrido seleccionado</p>',
+                '<div class="trip-summary-grid">',
+                '<span class="trip-summary-label">Longitud:</span>',
+                `<span>${formatDistance(calculateSegmentDistance(summaryOrderedPoints))}</span>`,
+                '<span class="trip-summary-label">Vel. máx:</span>',
+                `<span>${formatSpeedMetersPerSecond(calculateMaxSpeed(summaryOrderedPoints))}</span>`,
+                '<span class="trip-summary-label">Inicio:</span>',
+                `<span>${formatDateTime(summaryStartTime)}</span>`,
+                '<span class="trip-summary-label">Fin:</span>',
+                `<span>${formatDateTime(summaryEndTime)}</span>`,
+                '<span class="trip-summary-label">Clasificación:</span>',
+                `<span>${renderTripCategoryEditor(summaryTrip)}</span>`,
+                '</div>'
+            ].join("");
+            renderSpeedDistanceChart(summaryOrderedPoints);
+        }
+
+        function buildSpeedDistanceSeries(points) {
+            const orderedPoints = getChronologicalPoints(points);
+            let accumulatedMeters = 0;
+            const pointRefs = [];
+
+            const series = orderedPoints.reduce((series, point, index) => {
+                const speed = Number(point.speed);
+
+                if (index > 0) {
+                    accumulatedMeters += getPointLatLng(orderedPoints[index - 1]).distanceTo(getPointLatLng(point));
+                }
+
+                if (Number.isNaN(speed)) {
+                    return series;
+                }
+
+                series.push({
+                    x: Number((accumulatedMeters / 1000).toFixed(3)),
+                    y: Number((speed * 3.6).toFixed(1))
+                });
+                pointRefs.push(point);
+
+                return series;
+            }, []);
+
+            return { series, pointRefs };
+        }
+
+        function clearSpeedDistanceChart(emptyMessage = "Selecciona un recorrido para ver el gráfico.") {
+            clearChartMapHighlight();
+            speedChartPointRefs = [];
+
+            if (speedDistanceChart) {
+                speedDistanceChart.destroy();
+                speedDistanceChart = null;
+            }
+
+            speedChartEmpty.textContent = emptyMessage;
+            speedChartEmpty.style.display = "flex";
+            speedDistanceCanvas.style.display = "none";
+        }
+
+        function renderSpeedDistanceChart(points) {
+            if (typeof Chart === "undefined") {
+                clearSpeedDistanceChart("No se pudo cargar el gráfico.");
+                return;
+            }
+
+            const { series, pointRefs } = buildSpeedDistanceSeries(points);
+            speedChartPointRefs = pointRefs;
+
+            if (series.length < 2) {
+                clearSpeedDistanceChart("El recorrido no tiene suficientes datos de velocidad para graficar.");
+                return;
+            }
+
+            speedChartEmpty.style.display = "none";
+            speedDistanceCanvas.style.display = "block";
+
+            if (speedDistanceChart) {
+                speedDistanceChart.data.datasets[0].data = series;
+                speedDistanceChart.update();
+                return;
+            }
+
+            speedDistanceChart = new Chart(speedDistanceCanvas, {
+                type: "line",
+                data: {
+                    datasets: [{
+                        label: "Velocidad (km/h)",
+                        data: series,
+                        borderColor: "#1d7a8c",
+                        backgroundColor: "rgba(29, 122, 140, 0.12)",
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        pointHoverRadius: 4,
+                        tension: 0.25,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    parsing: false,
+                    animation: false,
+                    onClick: handleSpeedChartClick,
+                    scales: {
+                        x: {
+                            type: "linear",
+                            title: {
+                                display: true,
+                                text: "Distancia acumulada (km)"
+                            },
+                            ticks: {
+                                callback: (value) => `${value} km`
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: "Velocidad (km/h)"
+                            },
+                            ticks: {
+                                callback: (value) => `${value} km/h`
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `Velocidad: ${context.parsed.y} km/h`,
+                                title: (items) => items.length ? `Distancia: ${items[0].parsed.x} km` : ""
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         async function fetchTripById(tripId) {
@@ -250,6 +1025,128 @@
             }
 
             return response.json();
+        }
+
+        async function fetchTrips() {
+            const response = await fetch(`${apiBaseUrl}/trips`);
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        async function updateTripCategory(tripId, categoria) {
+            const response = await fetch(`${apiBaseUrl}/trips/${tripId}/category`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ categoria })
+            });
+
+            if (!response.ok) {
+                let detail = `Error ${response.status}`;
+                try {
+                    const errorBody = await response.json();
+                    detail = errorBody.detail || detail;
+                } catch (error) {
+                    // Keep the HTTP status when the backend does not return JSON.
+                }
+                throw new Error(detail);
+            }
+
+            return response.json();
+        }
+
+        function applyUpdatedTrip(updatedTrip) {
+            const sameTrip = (trip) => trip && String(trip.id) === String(updatedTrip.id);
+            const mergeTrip = (trip) => {
+                if (sameTrip(trip)) {
+                    Object.assign(trip, updatedTrip);
+                    return true;
+                }
+                return false;
+            };
+
+            if (currentTrip && sameTrip(currentTrip)) {
+                Object.assign(currentTrip, updatedTrip);
+            }
+
+            currentTrips.forEach(mergeTrip);
+            currentTripsWithPoints.forEach(({ trip, points }) => {
+                if (mergeTrip(trip)) {
+                    points.forEach((point) => {
+                        point._trip = trip;
+                    });
+                }
+            });
+            allTripsCache = allTripsCache.map((trip) => sameTrip(trip) ? { ...trip, ...updatedTrip } : trip);
+
+            currentPoints.forEach((point) => {
+                if (point._trip && sameTrip(point._trip)) {
+                    Object.assign(point._trip, updatedTrip);
+                }
+                if (point._mapMarker) {
+                    point._mapMarker.setPopupContent(buildPointPopupContent(point));
+                }
+            });
+        }
+
+        function enterCategoryEditMode() {
+            if (!getSelectedTripItem()) {
+                return;
+            }
+
+            isCategoryEditMode = true;
+            renderTripSummary(null);
+            const input = document.getElementById("trip-category-input");
+            if (input) {
+                input.focus();
+                input.select();
+            }
+        }
+
+        function cancelCategoryEdit() {
+            isCategoryEditMode = false;
+            renderTripSummary(null);
+        }
+
+        async function saveTripCategory() {
+            const selectedItem = getSelectedTripItem();
+            const input = document.getElementById("trip-category-input");
+            const saveButton = tripSummary.querySelector('[data-category-action="save"]');
+
+            if (!selectedItem || !input) {
+                return;
+            }
+
+            const categoria = input.value.trim();
+            if (!categoria) {
+                setMessage("La categoria no puede quedar vacia.", true);
+                input.focus();
+                return;
+            }
+
+            if (saveButton) {
+                saveButton.disabled = true;
+            }
+
+            try {
+                const updatedTrip = await updateTripCategory(selectedItem.trip.id, categoria);
+                applyUpdatedTrip(updatedTrip);
+                isCategoryEditMode = false;
+                renderTripSummary(updatedTrip);
+                renderTripsList();
+                setMessage(`Categoria actualizada para el recorrido ${updatedTrip.id}.`);
+            } catch (error) {
+                setMessage("No se pudo actualizar la categoria del recorrido.", true);
+            } finally {
+                if (saveButton) {
+                    saveButton.disabled = false;
+                }
+            }
         }
 
         function getChronologicalPoints(points) {
@@ -271,6 +1168,10 @@
                 replayTimer = null;
             }
 
+            replayPoints = [];
+            replayIndex = 0;
+            replayPaused = false;
+
             if (replayMarker) {
                 map.removeLayer(replayMarker);
                 replayMarker = null;
@@ -286,6 +1187,7 @@
 
         function clearMap() {
             stopReplay();
+            clearChartMapHighlight();
             pointLayer.clearLayers();
 
             if (routeLine) {
@@ -295,16 +1197,29 @@
         }
 
         function restoreRouteLine() {
-            const latLngs = getRouteLatLngs();
-
-            if (routeLine || latLngs.length < 2) {
+            if (routeLine || !currentRouteSegments.length) {
                 return;
             }
 
-            routeLine = L.polyline(latLngs, {
-                color: "#0057ff",
-                weight: 5
-            }).addTo(map);
+            routeLine = L.layerGroup().addTo(map);
+            currentRouteSegments.forEach((segment) => {
+                const latLngs = getRouteLatLngs(segment);
+
+                if (latLngs.length < 2) {
+                    return;
+                }
+
+                const line = L.polyline(latLngs, getLineStyle(segment)).addTo(routeLine);
+                const tripId = segment.length ? getPointTripId(segment[0]) : null;
+
+                if (tripId != null) {
+                    line.on("click", () => selectTrip(tripId, false));
+                }
+
+                if (isSelectedTrip(tripId)) {
+                    line.bringToFront();
+                }
+            });
         }
 
         function removeRouteLine() {
@@ -314,8 +1229,14 @@
             }
         }
 
+        function redrawRouteLine() {
+            removeRouteLine();
+            restoreRouteLine();
+        }
+
         function centerRoute() {
-            const latLngs = getRouteLatLngs();
+            const replayPoints = getReplayPoints();
+            const latLngs = getRouteLatLngs(replayPoints);
 
             if (!latLngs.length) {
                 setMessage("Carga un recorrido antes de centrar el mapa.", true);
@@ -347,45 +1268,114 @@
             return Math.min(maxDelay, Math.max(minDelay, (nextTime - currentTime) * replayScale));
         }
 
+        function buildPointPopupContent(point) {
+            const tripId = getPointTripId(point);
+            const title = currentMode === "all" && tripId != null
+                ? `Trip ${tripId} - Punto ${point.id}`
+                : `Punto ${point.id}`;
+
+            return [
+                title,
+                `Fecha: ${point.timestamp}`,
+                `Categoria: ${getTripCategory(point)}`,
+                point.speed != null ? `Velocidad: ${point.speed}` : null,
+                point.accuracy != null ? `Precision: ${point.accuracy}` : null
+            ].filter(Boolean).join("<br>");
+        }
+
+        function handlePointClick(marker, event) {
+            if (event.originalEvent) {
+                L.DomEvent.stopPropagation(event.originalEvent);
+            }
+
+            marker.openPopup();
+        }
+
         function drawPoints(points, fitMap = true) {
             clearMap();
 
-            const orderedPoints = getChronologicalPoints(points);
+            const tripForPoints = currentTrip || (currentTripId ? { id: currentTripId } : null);
+            const orderedPoints = getChronologicalPoints(points).map((point) => ({
+                ...point,
+                _trip: tripForPoints
+            }));
             currentPoints = orderedPoints;
-            const latLngs = getRouteLatLngs(orderedPoints);
+            currentTrips = [];
+            currentTripsWithPoints = tripForPoints ? [{ trip: tripForPoints, points: orderedPoints }] : [];
+            currentRouteSegments = [orderedPoints];
+            if (selectedTripId != null && !getSelectedTripItem()) {
+                selectedTripId = null;
+                isCategoryEditMode = false;
+            }
 
             orderedPoints.forEach((point, index) => {
-                const isStart = index === 0;
-                const isEnd = index === orderedPoints.length - 1 && orderedPoints.length > 1;
-                const markerColor = isStart ? "#16a34a" : isEnd ? "#dc2626" : "#2563eb";
-                const marker = L.circleMarker(getPointLatLng(point), {
-                    radius: isStart || isEnd ? 7 : 4,
-                    color: markerColor,
-                    fillColor: markerColor,
-                    fillOpacity: isStart || isEnd ? 0.95 : 0.45,
-                    opacity: isStart || isEnd ? 1 : 0.65,
-                    weight: isStart || isEnd ? 2 : 1
-                });
-                marker.bindPopup(
-                    [
-                        `Punto ${point.id}`,
-                        `Fecha: ${point.timestamp}`,
-                        `Categoría: ${getTripCategory()}`,
-                        point.speed != null ? `Velocidad: ${point.speed}` : null,
-                        point.accuracy != null ? `Precisión: ${point.accuracy}` : null
-                    ].filter(Boolean).join("<br>")
-                );
+                const marker = L.circleMarker(getPointLatLng(point), getPointStyle(point, index, orderedPoints.length));
+                marker.bindPopup(buildPointPopupContent(point));
+                marker.on("click", (event) => handlePointClick(marker, event));
+                point._mapMarker = marker;
                 marker.addTo(pointLayer);
             });
 
             restoreRouteLine();
             renderTripSummary(currentTrip);
+            renderTripsList();
 
             if (!fitMap) {
                 return;
             }
 
             centerRoute();
+        }
+
+        function drawTrips(tripsWithPoints, fitMap = true) {
+            clearMap();
+
+            currentTrip = null;
+            currentTripId = null;
+            currentTrips = tripsWithPoints.map((item) => item.trip);
+            currentTripsWithPoints = [];
+            currentRouteSegments = [];
+            currentPoints = [];
+            if (selectedTripId != null && !tripsWithPoints.some(({ trip }) => String(trip.id) === String(selectedTripId))) {
+                selectedTripId = null;
+                isCategoryEditMode = false;
+            }
+
+            tripsWithPoints.forEach(({ trip, points }) => {
+                const orderedPoints = getChronologicalPoints(points).map((point) => ({
+                    ...point,
+                    _trip: trip
+                }));
+
+                if (!orderedPoints.length) {
+                    return;
+                }
+
+                currentTripsWithPoints.push({ trip, points: orderedPoints });
+                currentRouteSegments.push(orderedPoints);
+                currentPoints.push(...orderedPoints);
+
+                orderedPoints.forEach((point, index) => {
+                    const marker = L.circleMarker(getPointLatLng(point), getPointStyle(point, index, orderedPoints.length));
+                    marker.bindPopup(buildPointPopupContent(point));
+                    marker.on("click", (event) => handlePointClick(marker, event));
+                    point._mapMarker = marker;
+                    marker.addTo(pointLayer);
+                });
+            });
+
+            currentPoints = getChronologicalPoints(currentPoints);
+            restoreRouteLine();
+            renderTripSummary(null);
+            renderTripsList();
+
+            if (!fitMap) {
+                return;
+            }
+
+            if (currentPoints.length) {
+                centerRoute();
+            }
         }
 
         async function loadTripInfo(showMessages = true) {
@@ -440,6 +1430,7 @@
                 return;
             }
 
+            currentMode = "single";
             currentTripId = tripId;
 
             if (showMessages) {
@@ -464,8 +1455,14 @@
 
                 if (!points.length) {
                     currentPoints = [];
+                    currentTrips = [];
+                    currentTripsWithPoints = [];
+                    currentRouteSegments = [];
+                    selectedTripId = null;
+                    isCategoryEditMode = false;
                     clearMap();
                     renderTripSummary(currentTrip);
+                    renderTripsList();
                     if (showMessages) {
                         setMessage("No hay puntos para este recorrido.");
                     }
@@ -478,8 +1475,12 @@
                 }
             } catch (error) {
                 currentPoints = [];
+                currentTripsWithPoints = [];
+                selectedTripId = null;
+                isCategoryEditMode = false;
                 clearMap();
                 renderTripSummary(null);
+                renderTripsList();
                 if (showMessages) {
                     setMessage("No se pudo cargar el recorrido. Revisa que el backend este corriendo y que el trip_id exista.", true);
                 }
@@ -490,25 +1491,118 @@
             }
         }
 
+        async function loadAllTrips({ fitMap = true, showMessages = true } = {}) {
+            currentMode = "all";
+
+            if (showMessages) {
+                loadAllButton.disabled = true;
+                applyFilterButton.disabled = true;
+                clearFilterButton.disabled = true;
+                setMessage("Cargando recorridos...");
+            }
+
+            try {
+                const range = getFilterRange();
+                const trips = await fetchTrips();
+                allTripsCache = trips;
+                populateVehicleSelect(allTripsCache);
+                const orderedTrips = [...trips].sort((a, b) => {
+                    const timeA = new Date(getTripStartTime(a)).getTime();
+                    const timeB = new Date(getTripStartTime(b)).getTime();
+
+                    if (Number.isNaN(timeA) || Number.isNaN(timeB)) {
+                        return 0;
+                    }
+
+                    return timeA - timeB;
+                });
+                const filteredTrips = orderedTrips.filter((trip) => {
+                    return tripMatchesFilter(trip, range) && tripMatchesVehicle(trip);
+                });
+                const tripsWithPoints = await Promise.all(
+                    filteredTrips.map(async (trip) => {
+                        const response = await fetch(`${apiBaseUrl}/trips/${trip.id}/points`);
+
+                        if (!response.ok) {
+                            throw new Error(`Error ${response.status}`);
+                        }
+
+                        return {
+                            trip,
+                            points: await response.json()
+                        };
+                    })
+                );
+
+                drawTrips(tripsWithPoints, fitMap);
+
+                if (showMessages) {
+                    const totalTrips = filteredTrips.length;
+                    const totalPoints = currentPoints.length;
+                    const filterText = filterStartInput.value || filterEndInput.value ? " con filtro aplicado" : "";
+                    setMessage(`Recorridos cargados${filterText}: ${totalTrips}. Puntos: ${totalPoints}.`);
+                }
+            } catch (error) {
+                currentPoints = [];
+                currentTrip = null;
+                currentTrips = [];
+                currentTripId = null;
+                currentRouteSegments = [];
+                currentTripsWithPoints = [];
+                selectedTripId = null;
+                isCategoryEditMode = false;
+                clearMap();
+                renderTripSummary(null);
+                renderTripsList();
+
+                if (showMessages) {
+                    if (error.message === "inverted-filter") {
+                        setMessage("El inicio del filtro no puede ser posterior al fin.", true);
+                    } else if (error.message === "invalid-filter") {
+                        setMessage("El rango de fecha/hora no es válido.", true);
+                    } else {
+                        setMessage("No se pudieron cargar los recorridos. Revisa que el backend esté corriendo.", true);
+                    }
+                }
+            } finally {
+                if (showMessages) {
+                    loadAllButton.disabled = false;
+                    applyFilterButton.disabled = false;
+                    clearFilterButton.disabled = false;
+                }
+            }
+        }
+
         function startReplay() {
+            if (replayPaused && replayMarker) {
+                replayPaused = false;
+                replayTimer = setTimeout(advanceReplay, getNextReplayDelay());
+                setMessage("Replay reanudado.");
+                return;
+            }
+
             if (replayTimer || replayMarker) {
                 setMessage("Ya hay una reproducción activa.");
                 return;
             }
 
-            if (!currentPoints.length) {
+            replayPoints = getReplayPoints();
+
+            if (!replayPoints.length) {
                 setMessage("Carga un recorrido antes de reproducirlo.", true);
                 return;
             }
 
-            let index = 0;
+            replayIndex = 0;
+            replayPaused = false;
             removeRouteLine();
 
-            const firstLatLng = getPointLatLng(currentPoints[0]);
+            const firstLatLng = getPointLatLng(replayPoints[0]);
             replayLine = L.polyline([firstLatLng], {
                 color: "#f97316",
                 weight: 6,
-                opacity: 0.95
+                opacity: 0.95,
+                pane: routePaneName
             }).addTo(map);
             replayMarker = L.circleMarker(firstLatLng, {
                 radius: 10,
@@ -516,48 +1610,70 @@
                 fillColor: "#facc15",
                 fillOpacity: 0.95,
                 opacity: 1,
-                weight: 4
+                weight: 4,
+                pane: pointPaneName
             }).addTo(map);
             replayMarker.bindPopup("Replay del recorrido");
 
-            const advanceReplay = () => {
-                index += 1;
+            replayTimer = setTimeout(advanceReplay, getNextReplayDelay());
 
-                if (index >= currentPoints.length) {
-                    stopReplay();
-                    setMessage("Replay finalizado.");
-                    return;
-                }
-
-                const nextLatLng = getPointLatLng(currentPoints[index]);
-                replayMarker.setLatLng(nextLatLng);
-                replayLine.addLatLng(nextLatLng);
-
-                if (index < currentPoints.length - 1) {
-                    replayTimer = setTimeout(
-                        advanceReplay,
-                        getReplayDelay(currentPoints[index], currentPoints[index + 1])
-                    );
-                } else {
-                    replayTimer = setTimeout(advanceReplay, 300);
-                }
-            };
-
-            replayTimer = setTimeout(
-                advanceReplay,
-                currentPoints.length > 1 ? getReplayDelay(currentPoints[0], currentPoints[1]) : 300
-            );
-
-            setMessage("Reproduciendo recorrido...");
+            setMessage(selectedTripId == null ? "Reproduciendo recorrido..." : `Reproduciendo recorrido seleccionado: ${selectedTripId}.`);
         }
 
+        function getNextReplayDelay() {
+            if (!replayPoints.length || replayIndex >= replayPoints.length - 1) {
+                return 300;
+            }
+
+            return getReplayDelay(replayPoints[replayIndex], replayPoints[replayIndex + 1]);
+        }
+
+        function advanceReplay() {
+            replayTimer = null;
+
+            if (replayPaused) {
+                return;
+            }
+
+            replayIndex += 1;
+
+            if (replayIndex >= replayPoints.length) {
+                stopReplay();
+                setMessage("Replay finalizado.");
+                return;
+            }
+
+            const nextLatLng = getPointLatLng(replayPoints[replayIndex]);
+            replayMarker.setLatLng(nextLatLng);
+            replayLine.addLatLng(nextLatLng);
+            replayTimer = setTimeout(advanceReplay, getNextReplayDelay());
+        }
+
+        function pauseReplay() {
+            if (!replayTimer && !replayMarker) {
+                setMessage("No hay replay activo para pausar.", true);
+                return;
+            }
+
+            if (replayTimer) {
+                clearTimeout(replayTimer);
+                replayTimer = null;
+            }
+
+            replayPaused = true;
+            setMessage("Replay pausado.");
+        }
         function startAutoRefresh() {
             if (autoRefreshTimer) {
                 return;
             }
 
             autoRefreshTimer = setInterval(() => {
-                loadTripPoints({ fitMap: false, showMessages: false });
+                if (currentMode === "all") {
+                    loadAllTrips({ fitMap: false, showMessages: false });
+                } else {
+                    loadTripPoints({ fitMap: false, showMessages: false });
+                }
             }, 5000);
         }
 
@@ -570,11 +1686,51 @@
 
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
-            await loadTripPoints();
+            await loadAllTrips();
+        });
+
+        applyFilterButton.addEventListener("click", () => {
+            loadAllTrips();
+        });
+
+        clearFilterButton.addEventListener("click", () => {
+            vehicleSelect.value = "";
+            filterStartInput.value = "";
+            filterEndInput.value = "";
+            tripSelect.value = "";
+            selectedTripId = null;
+            isCategoryEditMode = false;
+            tripIdInput.value = "";
+            loadAllTrips();
+        });
+
+        loadAllButton.addEventListener("click", () => {
+            filterStartInput.value = "";
+            filterEndInput.value = "";
+            loadAllTrips();
         });
 
         loadTripButton.addEventListener("click", () => {
             loadTripInfo();
+        });
+
+        tripSummary.addEventListener("click", (event) => {
+            const action = event.target.dataset.categoryAction;
+
+            if (action === "edit") {
+                enterCategoryEditMode();
+            } else if (action === "cancel") {
+                cancelCategoryEdit();
+            }
+        });
+
+        tripSummary.addEventListener("submit", (event) => {
+            if (event.target.id !== "trip-category-form") {
+                return;
+            }
+
+            event.preventDefault();
+            saveTripCategory();
         });
 
         centerRouteButton.addEventListener("click", () => {
@@ -585,16 +1741,39 @@
             startReplay();
         });
 
+        pauseReplayButton.addEventListener("click", () => {
+            pauseReplay();
+        });
+
         stopReplayButton.addEventListener("click", () => {
             stopReplay();
             setMessage("Replay detenido.");
+        });
+
+        vehicleSelect.addEventListener("change", () => {
+            selectedTripId = null;
+            isCategoryEditMode = false;
+            tripIdInput.value = "";
+            tripSelect.value = "";
+            loadAllTrips();
+        });
+
+        tripSelect.addEventListener("change", () => {
+            if (!tripSelect.value) {
+                clearSelectedTrip({ fitMap: true });
+                return;
+            }
+
+            selectTrip(tripSelect.value, false);
         });
 
         autoRefreshInput.addEventListener("change", () => {
             if (autoRefreshInput.checked) {
                 startAutoRefresh();
                 setMessage("Actualización automática activada.");
-                if (currentTripId || tripIdInput.value.trim()) {
+                if (currentMode === "all") {
+                    loadAllTrips({ fitMap: false, showMessages: false });
+                } else if (currentTripId || tripIdInput.value.trim()) {
                     loadTripPoints({ fitMap: false, showMessages: false });
                 }
             } else {
@@ -602,6 +1781,8 @@
                 setMessage("Actualización automática desactivada.");
             }
         });
+
+        loadAllTrips();
     </script>
 </body>
 </html>

@@ -32,3 +32,26 @@ Respaldar cambios en GIT:
 
 git add .
 git commit -m "mejoras de trips y replay en mapa"
+
+
+Activar túnel en Ngrok:
+
+1- Token
+
+.\ngrok.exe config add-authtoken 3CSdS0cxIGVZ1V9H1bt74b5TOBa_4A2L3NqZh3fivgy78CNrC
+
+2- En etrminal de VS Code
+Dentro de C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\backend>
+
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+
+3- En powershell, abrir túnel.
+
+.\ngrok.exe http 8000
+
+
+
+
+
+
