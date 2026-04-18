@@ -289,6 +289,10 @@
             background: #3c4856;
         }
 
+        .split-mode-button.active {
+            background: #b42318;
+        }
+
         .hidden-control {
             display: none;
         }
@@ -408,6 +412,11 @@
                     <button id="center-route-button" type="button">Centrar recorrido</button>
                 </section>
 
+                <section class="control-group" aria-labelledby="split-trip-title">
+                    <h3 class="control-group-title" id="split-trip-title">Dividir recorrido</h3>
+                    <button id="split-trip-button" class="secondary-button split-mode-button" type="button">Dividir recorrido</button>
+                </section>
+
                 <section class="control-group">
                     <div class="button-stack">
                         <button id="apply-filter-button" type="button">Aplicar filtros</button>
@@ -457,6 +466,7 @@
         const loadButton = document.getElementById("load-button");
         const loadTripButton = document.getElementById("load-trip-button");
         const centerRouteButton = document.getElementById("center-route-button");
+        const splitTripButton = document.getElementById("split-trip-button");
         const replayButton = document.getElementById("replay-button");
         const pauseReplayButton = document.getElementById("pause-replay-button");
         const stopReplayButton = document.getElementById("stop-replay-button");
@@ -503,6 +513,8 @@
         let isCategoryEditMode = false;
         let categoryEditTripId = null;
         let isSavingTripCategory = false;
+        let isSplitMode = false;
+        let isSplittingTrip = false;
         let pendingCategoryValue = null;
         let pendingCategoryTripId = null;
         let dataLoadVersion = 0;
@@ -928,6 +940,7 @@
             selectedTripId = null;
             isCategoryEditMode = false;
             categoryEditTripId = null;
+            setSplitMode(false);
             tripIdInput.value = "";
             tripSelect.value = "";
             redrawCurrentMap();
@@ -1138,6 +1151,69 @@
             }
         }
 
+        function setSplitMode(active) {
+            isSplitMode = Boolean(active);
+            splitTripButton.classList.toggle("active", isSplitMode);
+            splitTripButton.textContent = isSplitMode ? "Cancelar división" : "Dividir recorrido";
+        }
+
+        function enterSplitMode() {
+            const selectedItem = getSelectedTripItem();
+            if (!selectedItem) {
+                setMessage("Selecciona un recorrido antes de dividir.", true);
+                return;
+            }
+
+            const orderedPoints = getChronologicalPoints(selectedItem.points);
+            if (orderedPoints.length < 3) {
+                setMessage("El recorrido necesita al menos 3 puntos para dividirse.", true);
+                return;
+            }
+
+            isCategoryEditMode = false;
+            categoryEditTripId = null;
+            stopReplay();
+            setSplitMode(true);
+            renderTripSummary(null);
+            setMessage("Modo división activo: selecciona un nodo interior del recorrido elegido.");
+        }
+
+        function cancelSplitMode(showMessage = true) {
+            setSplitMode(false);
+            if (showMessage) {
+                setMessage("División cancelada.");
+            }
+        }
+
+        function getPointIndexInTrip(points, pointId) {
+            return getChronologicalPoints(points).findIndex((point) => {
+                return String(point.id) === String(pointId);
+            });
+        }
+
+        function validateSplitPoint(point) {
+            const selectedItem = getSelectedTripItem();
+            if (!selectedItem) {
+                return "Selecciona un recorrido antes de dividir.";
+            }
+
+            if (String(getPointTripId(point)) !== String(selectedItem.trip.id)) {
+                return "El nodo debe pertenecer al recorrido seleccionado.";
+            }
+
+            const orderedPoints = getChronologicalPoints(selectedItem.points);
+            if (orderedPoints.length < 3) {
+                return "El recorrido necesita al menos 3 puntos para dividirse.";
+            }
+
+            const splitIndex = getPointIndexInTrip(orderedPoints, point.id);
+            if (splitIndex <= 0 || splitIndex >= orderedPoints.length - 1) {
+                return "Selecciona un nodo interior: no se puede dividir en el primer ni en el último punto.";
+            }
+
+            return "";
+        }
+
         function buildSpeedDistanceSeries(points) {
             const orderedPoints = getChronologicalPoints(points);
             let accumulatedMeters = 0;
@@ -1320,6 +1396,87 @@
                 return JSON.parse(responseText);
             } catch (error) {
                 return null;
+            }
+        }
+
+        async function splitTripAtPoint(tripId, pointId) {
+            const response = await fetch(`${apiBaseUrl}/trips/${tripId}/split`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ point_id: pointId })
+            });
+
+            if (!response.ok) {
+                let detail = `Error ${response.status}`;
+                try {
+                    const errorBody = await response.json();
+                    detail = errorBody.detail || detail;
+                } catch (error) {
+                    // Keep the HTTP status when the backend does not return JSON.
+                }
+                throw new Error(detail);
+            }
+
+            return response.json();
+        }
+
+        async function refreshAfterSplit(originalTripId) {
+            selectedTripId = originalTripId;
+            tripIdInput.value = originalTripId;
+            currentMode = "all";
+            await loadAllTrips({ fitMap: false, showMessages: false });
+            if (getTripItemById(originalTripId)) {
+                selectTrip(originalTripId, false);
+            }
+            centerRoute();
+        }
+
+        async function executeSplit(point) {
+            const selectedItem = getSelectedTripItem();
+            if (!selectedItem || isSplittingTrip) {
+                return;
+            }
+
+            const validationMessage = validateSplitPoint(point);
+            if (validationMessage) {
+                setMessage(validationMessage, true);
+                return;
+            }
+
+            const tripId = selectedItem.trip.id;
+            const confirmed = window.confirm(
+                `Dividir el recorrido ${tripId} en el punto ${point.id}?`
+            );
+            if (!confirmed) {
+                setMessage("División cancelada.");
+                return;
+            }
+
+            const wasAutoRefreshEnabled = autoRefreshInput.checked;
+            stopAutoRefresh();
+            stopReplay();
+            beginDataLoad();
+            isSplittingTrip = true;
+            splitTripButton.disabled = true;
+            setMessage("Dividiendo recorrido...");
+
+            try {
+                const splitResult = await splitTripAtPoint(tripId, point.id);
+                setSplitMode(false);
+                await refreshAfterSplit(splitResult.original_trip.id);
+                setMessage(
+                    `Recorrido dividido correctamente. Tramo inicial: ${splitResult.original_trip.id}. Tramo final nuevo: ${splitResult.new_trip.id}.`
+                );
+            } catch (error) {
+                setMessage(`No se pudo dividir el recorrido: ${error.message}`, true);
+            } finally {
+                isSplittingTrip = false;
+                splitTripButton.disabled = false;
+                if (wasAutoRefreshEnabled) {
+                    startAutoRefresh();
+                }
             }
         }
 
@@ -1673,9 +1830,14 @@
             ].filter(Boolean).join("<br>");
         }
 
-        function handlePointClick(marker, event) {
+        function handlePointClick(marker, event, point) {
             if (event.originalEvent) {
                 L.DomEvent.stopPropagation(event.originalEvent);
+            }
+
+            if (isSplitMode) {
+                executeSplit(point);
+                return;
             }
 
             marker.openPopup();
@@ -1698,12 +1860,13 @@
                 tripIdInput.value = "";
                 isCategoryEditMode = false;
                 categoryEditTripId = null;
+                setSplitMode(false);
             }
 
             orderedPoints.forEach((point, index) => {
                 const marker = L.circleMarker(getPointLatLng(point), getPointStyle(point, index, orderedPoints.length));
                 marker.bindPopup(buildPointPopupContent(point));
-                marker.on("click", (event) => handlePointClick(marker, event));
+                marker.on("click", (event) => handlePointClick(marker, event, point));
                 point._mapMarker = marker;
                 marker.addTo(pointLayer);
             });
@@ -1733,6 +1896,7 @@
                 tripIdInput.value = "";
                 isCategoryEditMode = false;
                 categoryEditTripId = null;
+                setSplitMode(false);
             }
 
             tripsWithPoints.forEach(({ trip, points }) => {
@@ -1752,7 +1916,7 @@
                 orderedPoints.forEach((point, index) => {
                     const marker = L.circleMarker(getPointLatLng(point), getPointStyle(point, index, orderedPoints.length));
                     marker.bindPopup(buildPointPopupContent(point));
-                    marker.on("click", (event) => handlePointClick(marker, event));
+                    marker.on("click", (event) => handlePointClick(marker, event, point));
                     point._mapMarker = marker;
                     marker.addTo(pointLayer);
                 });
@@ -1866,6 +2030,7 @@
                     selectedTripId = null;
                     isCategoryEditMode = false;
                     categoryEditTripId = null;
+                    setSplitMode(false);
                     clearMap();
                     renderTripSummary(currentTrip);
                     renderTripsList();
@@ -1885,6 +2050,7 @@
                 selectedTripId = null;
                 isCategoryEditMode = false;
                 categoryEditTripId = null;
+                setSplitMode(false);
                 clearMap();
                 renderTripSummary(null);
                 renderTripsList();
@@ -1968,6 +2134,7 @@
                 selectedTripId = null;
                 isCategoryEditMode = false;
                 categoryEditTripId = null;
+                setSplitMode(false);
                 clearMap();
                 renderTripSummary(null);
                 renderTripsList();
@@ -2120,6 +2287,7 @@
             selectedTripId = null;
             isCategoryEditMode = false;
             categoryEditTripId = null;
+            setSplitMode(false);
             tripIdInput.value = "";
             loadAllTrips();
         });
@@ -2148,6 +2316,18 @@
             centerRoute();
         });
 
+        splitTripButton.addEventListener("click", () => {
+            if (isSplittingTrip) {
+                return;
+            }
+
+            if (isSplitMode) {
+                cancelSplitMode();
+            } else {
+                enterSplitMode();
+            }
+        });
+
         replayButton.addEventListener("click", () => {
             startReplay();
         });
@@ -2165,6 +2345,7 @@
             selectedTripId = null;
             isCategoryEditMode = false;
             categoryEditTripId = null;
+            setSplitMode(false);
             tripIdInput.value = "";
             tripSelect.value = "";
             loadAllTrips();
@@ -2180,6 +2361,7 @@
                 return;
             }
 
+            setSplitMode(false);
             selectTrip(tripSelect.value, false);
         });
 

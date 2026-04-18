@@ -12,6 +12,10 @@ class TripCategoryUpdate(BaseModel):
     categoria: str
 
 
+class TripSplitRequest(BaseModel):
+    point_id: int
+
+
 class TripResponse(BaseModel):
     id: int
     vehicle_id: int
@@ -26,3 +30,10 @@ class TripResponse(BaseModel):
 
 class TripStopResponse(TripResponse):
     pass
+
+
+class TripSplitResponse(BaseModel):
+    original_trip: TripResponse
+    new_trip: TripResponse
+    split_point_id: int
+    duplicated_point_id: int

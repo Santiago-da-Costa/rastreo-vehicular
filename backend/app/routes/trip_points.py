@@ -34,6 +34,6 @@ def list_trip_points(trip_id: int, db: Session = Depends(get_db)):
     return (
         db.query(TripPoint)
         .filter(TripPoint.trip_id == trip_id)
-        .order_by(TripPoint.timestamp.asc())
+        .order_by(TripPoint.timestamp.asc(), TripPoint.id.asc())
         .all()
     )
