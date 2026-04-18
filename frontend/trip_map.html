@@ -135,6 +135,27 @@
             font-size: 0.78rem;
         }
 
+        .category-legend {
+            display: grid;
+            gap: 6px;
+        }
+
+        .category-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: #3c4856;
+            font-size: 0.78rem;
+        }
+
+        .category-legend-swatch {
+            width: 12px;
+            height: 12px;
+            border: 1px solid rgba(31, 41, 51, 0.22);
+            border-radius: 3px;
+            flex: 0 0 auto;
+        }
+
         .map-layout {
             display: flex;
             height: 100vh;
@@ -213,6 +234,12 @@
             display: grid;
             gap: 12px;
             padding: 12px;
+        }
+
+        .trip-filter-form {
+            display: grid;
+            gap: 12px;
+            margin: 0;
         }
 
         .control-group {
@@ -299,8 +326,9 @@
                 <h2 class="trips-panel-title">Recorridos</h2>
                 <p class="trips-panel-help">Filtra, selecciona y reproduce recorridos.</p>
             </div>
-            <form class="sidebar-form" id="trip-form">
-                <section class="control-group" aria-labelledby="vehicle-filter-title">
+            <div class="sidebar-form">
+                <form class="trip-filter-form" id="trip-form">
+                    <section class="control-group" aria-labelledby="vehicle-filter-title">
                     <h3 class="control-group-title" id="vehicle-filter-title">Selección de vehículo</h3>
                     <div class="field">
                         <label for="vehicle-select">Vehículo</label>
@@ -308,9 +336,20 @@
                             <option value="">Ver todos</option>
                         </select>
                     </div>
-                </section>
+                    <div class="field">
+                        <label for="category-filter-select">Categoría</label>
+                        <select id="category-filter-select" name="category-filter-select">
+                            <option value="">Ver todas</option>
+                            <option value="trabajo">Trabajo</option>
+                            <option value="ocio">Ocio</option>
+                            <option value="personal">Personal</option>
+                            <option value="otro">Otro</option>
+                            <option value="default">Sin dato</option>
+                        </select>
+                    </div>
+                    </section>
 
-                <section class="control-group" aria-labelledby="period-filter-title">
+                    <section class="control-group" aria-labelledby="period-filter-title">
                     <h3 class="control-group-title" id="period-filter-title">Selección de período</h3>
                     <div class="field">
                         <label for="filter-start">Inicio</label>
@@ -321,9 +360,9 @@
                         <input id="filter-end" name="filter-end" type="datetime-local">
                     </div>
                     <button id="load-all-button" class="secondary-button" type="button">Ver todo</button>
-                </section>
+                    </section>
 
-                <section class="control-group" aria-labelledby="trip-filter-title">
+                    <section class="control-group" aria-labelledby="trip-filter-title">
                     <h3 class="control-group-title" id="trip-filter-title">Lista de recorridos</h3>
                     <div class="field">
                         <label for="trip-select">Recorrido</label>
@@ -334,7 +373,14 @@
                     <input id="trip-id" class="hidden-control" name="trip-id" type="number" min="1">
                     <button id="load-button" class="hidden-control" type="submit">Cargar recorrido</button>
                     <button id="load-trip-button" class="hidden-control" type="button">Cargar datos del trip</button>
-                    <div class="trip-summary" id="trip-summary" aria-live="polite"></div>
+                    </section>
+                </form>
+
+                <div class="trip-summary" id="trip-summary" aria-live="polite"></div>
+
+                <section class="control-group" aria-labelledby="category-legend-title">
+                    <h3 class="control-group-title" id="category-legend-title">Categorías</h3>
+                    <div class="category-legend" id="category-legend"></div>
                 </section>
 
                 <section class="control-group" aria-labelledby="replay-title">
@@ -364,7 +410,7 @@
                     </label>
                     <div class="message" id="message" aria-live="polite"></div>
                 </section>
-            </form>
+            </div>
         </aside>
         <section class="map-content" aria-label="Mapa y analisis del recorrido">
             <div id="map"></div>
@@ -384,9 +430,11 @@
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
     <script>
+        console.log("TRIP_MAP_SERVIDO_OK");
         const apiBaseUrl = window.location.origin;
         const form = document.getElementById("trip-form");
         const vehicleSelect = document.getElementById("vehicle-select");
+        const categoryFilterSelect = document.getElementById("category-filter-select");
         const filterStartInput = document.getElementById("filter-start");
         const filterEndInput = document.getElementById("filter-end");
         const applyFilterButton = document.getElementById("apply-filter-button");
@@ -403,6 +451,7 @@
         const autoRefreshInput = document.getElementById("auto-refresh");
         const message = document.getElementById("message");
         const tripSummary = document.getElementById("trip-summary");
+        const categoryLegend = document.getElementById("category-legend");
         const speedDistanceCanvas = document.getElementById("speed-distance-chart");
         const speedChartEmpty = document.getElementById("speed-chart-empty");
 
@@ -440,7 +489,20 @@
         let speedChartPointRefs = [];
         let chartMapHighlight = null;
         let isCategoryEditMode = false;
+        let categoryEditTripId = null;
+        let isSavingTripCategory = false;
+        let pendingCategoryValue = null;
+        let pendingCategoryTripId = null;
+        let dataLoadVersion = 0;
         const tripCategoryOptions = ["Trabajo", "Ocio", "Personal", "Otro"];
+        const unknownTripCategory = "Sin dato";
+        const tripCategoryPalette = {
+            trabajo: { label: "Trabajo", color: "#2563eb" },
+            ocio: { label: "Ocio", color: "#16a34a" },
+            personal: { label: "Personal", color: "#f97316" },
+            otro: { label: "Otro", color: "#7c3aed" },
+            default: { label: unknownTripCategory, color: "#6b7280" }
+        };
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
@@ -452,9 +514,69 @@
             message.classList.toggle("error", isError);
         }
 
+        function beginDataLoad() {
+            dataLoadVersion += 1;
+            return dataLoadVersion;
+        }
+
+        function isStaleDataLoad(loadVersion) {
+            return loadVersion !== dataLoadVersion;
+        }
+
         function getTripCategory(point = null) {
             const trip = point && point._trip ? point._trip : currentTrip;
             return getTripClassification(trip);
+        }
+
+        function normalizeTripCategory(category) {
+            return String(category || "")
+                .trim()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase();
+        }
+
+        function getTripCategoryKey(category) {
+            const categoryKey = normalizeTripCategory(category);
+            return tripCategoryPalette[categoryKey] ? categoryKey : "default";
+        }
+
+        function getCategoryColor(category) {
+            const categoryKey = getTripCategoryKey(category);
+            const categoryStyle = tripCategoryPalette[categoryKey] || tripCategoryPalette.default;
+            return categoryStyle.color;
+        }
+
+        function getTripCategoryColor(trip) {
+            return getCategoryColor(getTripClassification(trip));
+        }
+
+        function getTripLineStyle(trip, selected, dimmed) {
+            return {
+                color: getTripCategoryColor(trip),
+                weight: selected ? 8 : 5,
+                opacity: dimmed ? 0.28 : (selected ? 0.95 : 0.85),
+                pane: routePaneName
+            };
+        }
+
+        function renderCategoryLegend() {
+            const legendItems = [
+                tripCategoryPalette.trabajo,
+                tripCategoryPalette.ocio,
+                tripCategoryPalette.personal,
+                tripCategoryPalette.otro,
+                tripCategoryPalette.default
+            ];
+
+            categoryLegend.innerHTML = legendItems.map(({ label, color }) => {
+                return [
+                    '<span class="category-legend-item">',
+                    `<span class="category-legend-swatch" style="background: ${color};"></span>`,
+                    `<span>${escapeHtml(label)}</span>`,
+                    '</span>'
+                ].join("");
+            }).join("");
         }
 
         function formatValue(value) {
@@ -472,10 +594,10 @@
 
         function getTripClassification(trip) {
             if (!trip) {
-                return "Sin dato";
+                return unknownTripCategory;
             }
 
-            return trip.categoria || trip.clasificacion || trip.classification || trip.category || "Sin dato";
+            return trip.categoria || trip.clasificacion || trip.classification || trip.category || unknownTripCategory;
         }
 
         function getPointLatLng(point) {
@@ -596,6 +718,10 @@
             return vehicleSelect.value;
         }
 
+        function getSelectedCategoryKey() {
+            return categoryFilterSelect.value;
+        }
+
         function tripMatchesVehicle(trip) {
             const selectedVehicleId = getSelectedVehicleId();
 
@@ -604,6 +730,16 @@
             }
 
             return String(getTripVehicleId(trip)) === String(selectedVehicleId);
+        }
+
+        function tripMatchesCategory(trip) {
+            const selectedCategoryKey = getSelectedCategoryKey();
+
+            if (!selectedCategoryKey) {
+                return true;
+            }
+
+            return getTripCategoryKey(getTripClassification(trip)) === selectedCategoryKey;
         }
 
         function populateVehicleSelect(trips) {
@@ -650,14 +786,15 @@
         function getPointStyle(point, index, totalPoints) {
             const isStart = index === 0;
             const isEnd = index === totalPoints - 1 && totalPoints > 1;
-            const markerColor = isStart ? "#16a34a" : isEnd ? "#dc2626" : "#2563eb";
+            const categoryColor = getCategoryColor(getTripCategory(point));
+            const markerBorderColor = isStart ? "#16a34a" : isEnd ? "#dc2626" : categoryColor;
             const selected = isSelectedTrip(getPointTripId(point));
             const dimmed = selectedTripId != null && !selected;
 
             return {
                 radius: selected ? (isStart || isEnd ? 9 : 6) : (isStart || isEnd ? 7 : 4),
-                color: markerColor,
-                fillColor: markerColor,
+                color: markerBorderColor,
+                fillColor: categoryColor,
                 fillOpacity: dimmed ? 0.18 : (isStart || isEnd ? 0.95 : 0.45),
                 opacity: dimmed ? 0.25 : (isStart || isEnd ? 1 : 0.65),
                 weight: selected ? 3 : (isStart || isEnd ? 2 : 1),
@@ -667,15 +804,11 @@
 
         function getLineStyle(segment) {
             const tripId = segment.length ? getPointTripId(segment[0]) : null;
+            const trip = segment.length && segment[0]._trip ? segment[0]._trip : currentTrip;
             const selected = isSelectedTrip(tripId);
             const dimmed = selectedTripId != null && !selected;
 
-            return {
-                color: selected ? "#f97316" : "#0057ff",
-                weight: selected ? 8 : 5,
-                opacity: dimmed ? 0.22 : 0.85,
-                pane: routePaneName
-            };
+            return getTripLineStyle(trip, selected, dimmed);
         }
 
         function getReplayPoints() {
@@ -755,6 +888,7 @@
 
             if (selectedTripId == null || String(selectedTripId) !== String(tripId)) {
                 isCategoryEditMode = false;
+                categoryEditTripId = null;
             }
             selectedTripId = tripId;
             tripIdInput.value = tripId;
@@ -771,6 +905,7 @@
         function clearSelectedTrip({ showMessage = true, fitMap = false } = {}) {
             selectedTripId = null;
             isCategoryEditMode = false;
+            categoryEditTripId = null;
             tripIdInput.value = "";
             tripSelect.value = "";
             redrawCurrentMap();
@@ -826,22 +961,55 @@
             return true;
         }
 
+        function tripMatchesActiveFilters(trip, range) {
+            return tripMatchesFilter(trip, range)
+                && tripMatchesVehicle(trip)
+                && tripMatchesCategory(trip);
+        }
+
+        function getEditableTripCategory(summaryTrip) {
+            if (
+                pendingCategoryTripId != null
+                && summaryTrip
+                && String(pendingCategoryTripId) === String(summaryTrip.id)
+                && pendingCategoryValue
+            ) {
+                return pendingCategoryValue;
+            }
+
+            const currentCategory = getTripClassification(summaryTrip);
+            const matchingCategory = tripCategoryOptions.find((category) => {
+                return normalizeTripCategory(category) === normalizeTripCategory(currentCategory);
+            });
+
+            return matchingCategory || "Otro";
+        }
+
         function renderTripCategoryEditor(summaryTrip) {
             const currentCategory = getTripClassification(summaryTrip);
-            const categoryValue = currentCategory === "Sin dato" ? "" : currentCategory;
+            const categoryValue = getEditableTripCategory(summaryTrip);
+            const isSavingCurrentTrip = isSavingTripCategory
+                && pendingCategoryTripId != null
+                && summaryTrip
+                && String(pendingCategoryTripId) === String(summaryTrip.id);
+            const disabledAttribute = isSavingCurrentTrip ? " disabled" : "";
             const optionsHtml = tripCategoryOptions
-                .map((category) => `<option value="${escapeHtml(category)}"></option>`)
+                .map((category) => {
+                    const selected = category === categoryValue ? " selected" : "";
+                    return `<option value="${escapeHtml(category)}"${selected}>${escapeHtml(category)}</option>`;
+                })
                 .join("");
 
             if (isCategoryEditMode) {
+                console.log("EDITOR CATEGORIA RENDERIZADO");
                 return [
                     '<form class="trip-category-edit-form" id="trip-category-form">',
-                    '<input class="trip-category-input" id="trip-category-input" name="categoria" list="trip-category-options" maxlength="50" autocomplete="off" required',
-                    ` value="${escapeHtml(categoryValue)}">`,
-                    `<datalist id="trip-category-options">${optionsHtml}</datalist>`,
+                    `<select class="trip-category-input" id="trip-category-select" name="categoria" required${disabledAttribute}>`,
+                    optionsHtml,
+                    '</select>',
                     '<div class="trip-category-edit-actions">',
-                    '<button class="trip-summary-button" type="submit" data-category-action="save">Guardar</button>',
-                    '<button class="trip-summary-button secondary-button" type="button" data-category-action="cancel">Cancelar</button>',
+                    `<button class="trip-summary-button" type="submit" data-category-action="save"${disabledAttribute}>${isSavingCurrentTrip ? "Guardando..." : "Guardar"}</button>`,
+                    `<button class="trip-summary-button secondary-button" type="button" data-category-action="cancel"${disabledAttribute}>Cancelar</button>`,
                     '</div>',
                     '</form>'
                 ].join("");
@@ -855,10 +1023,29 @@
             ].join("");
         }
 
+        function bindTripCategoryFormSubmit() {
+            const form = document.getElementById("trip-category-form");
+            if (!form) {
+                return;
+            }
+            if (form.dataset.submitBound === "true") {
+                return;
+            }
+
+            form.dataset.submitBound = "true";
+            console.log("BIND SUBMIT CATEGORIA");
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                console.log("SUBMIT FORM CATEGORIA");
+                saveTripCategory();
+            });
+        }
+
         function renderTripSummary(trip) {
             const selectedSummaryItem = getSelectedTripItem();
             if (!selectedSummaryItem) {
                 isCategoryEditMode = false;
+                categoryEditTripId = null;
             }
 
             if (!selectedSummaryItem) {
@@ -868,6 +1055,17 @@
             }
 
             const { trip: summaryTrip, points: summaryPoints } = selectedSummaryItem;
+            if (
+                isCategoryEditMode
+                && categoryEditTripId != null
+                && String(categoryEditTripId) === String(summaryTrip.id)
+                && document.getElementById("trip-category-form")
+            ) {
+                bindTripCategoryFormSubmit();
+                syncTripCategoryEditorState(summaryTrip);
+                return;
+            }
+
             const summaryOrderedPoints = getChronologicalPoints(summaryPoints);
             const summaryStartTime = getTripStartTime(summaryTrip) || (summaryOrderedPoints[0] ? summaryOrderedPoints[0].timestamp : null);
             const summaryEndTime = getTripEndTime(summaryTrip) || (summaryOrderedPoints.length ? summaryOrderedPoints[summaryOrderedPoints.length - 1].timestamp : null);
@@ -884,10 +1082,38 @@
                 '<span class="trip-summary-label">Fin:</span>',
                 `<span>${formatDateTime(summaryEndTime)}</span>`,
                 '<span class="trip-summary-label">Clasificación:</span>',
-                `<span>${renderTripCategoryEditor(summaryTrip)}</span>`,
+                `<div>${renderTripCategoryEditor(summaryTrip)}</div>`,
                 '</div>'
             ].join("");
+            bindTripCategoryFormSubmit();
             renderSpeedDistanceChart(summaryOrderedPoints);
+        }
+
+        function syncTripCategoryEditorState(summaryTrip) {
+            const form = document.getElementById("trip-category-form");
+            const select = document.getElementById("trip-category-select");
+            if (!form || !select || !summaryTrip) {
+                return;
+            }
+
+            const isSavingCurrentTrip = isSavingTripCategory
+                && pendingCategoryTripId != null
+                && String(pendingCategoryTripId) === String(summaryTrip.id);
+            const categoryValue = getEditableTripCategory(summaryTrip);
+            if (select.value !== categoryValue) {
+                select.value = categoryValue;
+            }
+
+            select.disabled = isSavingCurrentTrip;
+            const saveButton = form.querySelector('[data-category-action="save"]');
+            const cancelButton = form.querySelector('[data-category-action="cancel"]');
+            if (saveButton) {
+                saveButton.disabled = isSavingCurrentTrip;
+                saveButton.textContent = isSavingCurrentTrip ? "Guardando..." : "Guardar";
+            }
+            if (cancelButton) {
+                cancelButton.disabled = isSavingCurrentTrip;
+            }
         }
 
         function buildSpeedDistanceSeries(points) {
@@ -1024,7 +1250,8 @@
                 throw new Error(`Error ${response.status}`);
             }
 
-            return response.json();
+            const trip = await response.json();
+            return trip;
         }
 
         async function fetchTrips() {
@@ -1034,7 +1261,8 @@
                 throw new Error(`Error ${response.status}`);
             }
 
-            return response.json();
+            const trips = await response.json();
+            return trips;
         }
 
         async function updateTripCategory(tripId, categoria) {
@@ -1057,94 +1285,126 @@
                 throw new Error(detail);
             }
 
-            return response.json();
-        }
-
-        function applyUpdatedTrip(updatedTrip) {
-            const sameTrip = (trip) => trip && String(trip.id) === String(updatedTrip.id);
-            const mergeTrip = (trip) => {
-                if (sameTrip(trip)) {
-                    Object.assign(trip, updatedTrip);
-                    return true;
-                }
-                return false;
-            };
-
-            if (currentTrip && sameTrip(currentTrip)) {
-                Object.assign(currentTrip, updatedTrip);
+            if (response.status === 204) {
+                return null;
             }
 
-            currentTrips.forEach(mergeTrip);
-            currentTripsWithPoints.forEach(({ trip, points }) => {
-                if (mergeTrip(trip)) {
-                    points.forEach((point) => {
-                        point._trip = trip;
-                    });
-                }
-            });
-            allTripsCache = allTripsCache.map((trip) => sameTrip(trip) ? { ...trip, ...updatedTrip } : trip);
+            const responseText = await response.text();
+            if (!responseText) {
+                return null;
+            }
 
-            currentPoints.forEach((point) => {
-                if (point._trip && sameTrip(point._trip)) {
-                    Object.assign(point._trip, updatedTrip);
-                }
-                if (point._mapMarker) {
-                    point._mapMarker.setPopupContent(buildPointPopupContent(point));
-                }
-            });
+            try {
+                return JSON.parse(responseText);
+            } catch (error) {
+                return null;
+            }
         }
 
         function enterCategoryEditMode() {
-            if (!getSelectedTripItem()) {
+            const selectedItem = getSelectedTripItem();
+            if (!selectedItem) {
                 return;
             }
 
             isCategoryEditMode = true;
+            categoryEditTripId = selectedItem.trip.id;
+            isSavingTripCategory = false;
+            pendingCategoryValue = null;
+            pendingCategoryTripId = null;
             renderTripSummary(null);
-            const input = document.getElementById("trip-category-input");
-            if (input) {
-                input.focus();
-                input.select();
+            const select = document.getElementById("trip-category-select");
+            if (select) {
+                select.focus();
             }
         }
 
         function cancelCategoryEdit() {
+            if (isSavingTripCategory) {
+                return;
+            }
+
             isCategoryEditMode = false;
+            categoryEditTripId = null;
+            pendingCategoryValue = null;
+            pendingCategoryTripId = null;
             renderTripSummary(null);
         }
 
-        async function saveTripCategory() {
-            const selectedItem = getSelectedTripItem();
-            const input = document.getElementById("trip-category-input");
-            const saveButton = tripSummary.querySelector('[data-category-action="save"]');
+        async function refreshAfterCategorySave(tripId) {
+            const refreshedTrip = await fetchTripById(tripId);
+            if (!refreshedTrip) {
+                throw new Error("Trip not found after update");
+            }
 
-            if (!selectedItem || !input) {
+            selectedTripId = refreshedTrip.id;
+            tripIdInput.value = refreshedTrip.id;
+
+            if (currentMode === "all") {
+                if (getSelectedCategoryKey() && !tripMatchesCategory(refreshedTrip)) {
+                    categoryFilterSelect.value = "";
+                }
+                await loadAllTrips({ fitMap: false, showMessages: false });
+                selectTrip(refreshedTrip.id, false);
+            } else {
+                currentTripId = refreshedTrip.id;
+                currentTrip = refreshedTrip;
+                await loadTripPoints({ fitMap: false, showMessages: false });
+                selectedTripId = refreshedTrip.id;
+                tripIdInput.value = refreshedTrip.id;
+                redrawCurrentMap();
+            }
+
+            return refreshedTrip;
+        }
+
+        async function saveTripCategory() {
+            console.log("GUARDAR CATEGORIA CLICK");
+            const selectedItem = getSelectedTripItem();
+            const select = document.getElementById("trip-category-select");
+
+            if (!selectedItem || !select || isSavingTripCategory) {
                 return;
             }
 
-            const categoria = input.value.trim();
+            const categoria = select.value.trim();
             if (!categoria) {
                 setMessage("La categoria no puede quedar vacia.", true);
-                input.focus();
+                select.focus();
                 return;
             }
 
-            if (saveButton) {
-                saveButton.disabled = true;
-            }
+            const tripId = selectedItem.trip.id;
+            isSavingTripCategory = true;
+            pendingCategoryValue = categoria;
+            pendingCategoryTripId = tripId;
+            syncTripCategoryEditorState(selectedItem.trip);
+            setMessage("Guardando categoria del recorrido...");
+
+            const wasAutoRefreshEnabled = autoRefreshInput.checked;
+            stopAutoRefresh();
+            beginDataLoad();
 
             try {
-                const updatedTrip = await updateTripCategory(selectedItem.trip.id, categoria);
-                applyUpdatedTrip(updatedTrip);
+                await updateTripCategory(tripId, categoria);
+                const refreshedTrip = await refreshAfterCategorySave(tripId);
                 isCategoryEditMode = false;
-                renderTripSummary(updatedTrip);
-                renderTripsList();
-                setMessage(`Categoria actualizada para el recorrido ${updatedTrip.id}.`);
+                categoryEditTripId = null;
+                pendingCategoryValue = null;
+                pendingCategoryTripId = null;
+                redrawCurrentMap();
+                setMessage(`Categoria actualizada para el recorrido ${refreshedTrip.id}: ${getTripClassification(refreshedTrip)}.`);
             } catch (error) {
                 setMessage("No se pudo actualizar la categoria del recorrido.", true);
+                renderTripSummary(null);
             } finally {
-                if (saveButton) {
-                    saveButton.disabled = false;
+                isSavingTripCategory = false;
+                const currentSelectedItem = getSelectedTripItem();
+                if (isCategoryEditMode && currentSelectedItem) {
+                    syncTripCategoryEditorState(currentSelectedItem.trip);
+                }
+                if (wasAutoRefreshEnabled) {
+                    startAutoRefresh();
                 }
             }
         }
@@ -1305,7 +1565,9 @@
             currentRouteSegments = [orderedPoints];
             if (selectedTripId != null && !getSelectedTripItem()) {
                 selectedTripId = null;
+                tripIdInput.value = "";
                 isCategoryEditMode = false;
+                categoryEditTripId = null;
             }
 
             orderedPoints.forEach((point, index) => {
@@ -1338,7 +1600,9 @@
             currentPoints = [];
             if (selectedTripId != null && !tripsWithPoints.some(({ trip }) => String(trip.id) === String(selectedTripId))) {
                 selectedTripId = null;
+                tripIdInput.value = "";
                 isCategoryEditMode = false;
+                categoryEditTripId = null;
             }
 
             tripsWithPoints.forEach(({ trip, points }) => {
@@ -1392,8 +1656,13 @@
                 loadTripButton.disabled = true;
             }
 
+            const loadVersion = beginDataLoad();
+
             try {
                 const trip = await fetchTripById(tripId);
+                if (isStaleDataLoad(loadVersion)) {
+                    return null;
+                }
                 currentTrip = trip;
                 renderTripSummary(trip);
                 if (currentPoints.length && String(currentTripId) === String(tripId)) {
@@ -1415,7 +1684,7 @@
 
                 return null;
             } finally {
-                if (showMessages) {
+                if (showMessages && !isStaleDataLoad(loadVersion)) {
                     loadTripButton.disabled = false;
                 }
             }
@@ -1438,11 +1707,17 @@
                 setMessage("Cargando recorrido...");
             }
 
+            const loadVersion = beginDataLoad();
+
             try {
                 const [pointsResponse, trip] = await Promise.all([
                     fetch(`${apiBaseUrl}/trips/${tripId}/points`),
                     fetchTripById(tripId).catch(() => null)
                 ]);
+
+                if (isStaleDataLoad(loadVersion)) {
+                    return;
+                }
 
                 if (!pointsResponse.ok) {
                     throw new Error(`Error ${pointsResponse.status}`);
@@ -1460,6 +1735,7 @@
                     currentRouteSegments = [];
                     selectedTripId = null;
                     isCategoryEditMode = false;
+                    categoryEditTripId = null;
                     clearMap();
                     renderTripSummary(currentTrip);
                     renderTripsList();
@@ -1478,6 +1754,7 @@
                 currentTripsWithPoints = [];
                 selectedTripId = null;
                 isCategoryEditMode = false;
+                categoryEditTripId = null;
                 clearMap();
                 renderTripSummary(null);
                 renderTripsList();
@@ -1485,7 +1762,7 @@
                     setMessage("No se pudo cargar el recorrido. Revisa que el backend este corriendo y que el trip_id exista.", true);
                 }
             } finally {
-                if (showMessages) {
+                if (showMessages && !isStaleDataLoad(loadVersion)) {
                     loadButton.disabled = false;
                 }
             }
@@ -1501,9 +1778,14 @@
                 setMessage("Cargando recorridos...");
             }
 
+            const loadVersion = beginDataLoad();
+
             try {
                 const range = getFilterRange();
                 const trips = await fetchTrips();
+                if (isStaleDataLoad(loadVersion)) {
+                    return;
+                }
                 allTripsCache = trips;
                 populateVehicleSelect(allTripsCache);
                 const orderedTrips = [...trips].sort((a, b) => {
@@ -1517,7 +1799,7 @@
                     return timeA - timeB;
                 });
                 const filteredTrips = orderedTrips.filter((trip) => {
-                    return tripMatchesFilter(trip, range) && tripMatchesVehicle(trip);
+                    return tripMatchesActiveFilters(trip, range);
                 });
                 const tripsWithPoints = await Promise.all(
                     filteredTrips.map(async (trip) => {
@@ -1533,6 +1815,10 @@
                         };
                     })
                 );
+
+                if (isStaleDataLoad(loadVersion)) {
+                    return;
+                }
 
                 drawTrips(tripsWithPoints, fitMap);
 
@@ -1551,6 +1837,7 @@
                 currentTripsWithPoints = [];
                 selectedTripId = null;
                 isCategoryEditMode = false;
+                categoryEditTripId = null;
                 clearMap();
                 renderTripSummary(null);
                 renderTripsList();
@@ -1565,7 +1852,7 @@
                     }
                 }
             } finally {
-                if (showMessages) {
+                if (showMessages && !isStaleDataLoad(loadVersion)) {
                     loadAllButton.disabled = false;
                     applyFilterButton.disabled = false;
                     clearFilterButton.disabled = false;
@@ -1598,15 +1885,16 @@
             removeRouteLine();
 
             const firstLatLng = getPointLatLng(replayPoints[0]);
+            const replayCategoryColor = getCategoryColor(getTripCategory(replayPoints[0]));
             replayLine = L.polyline([firstLatLng], {
-                color: "#f97316",
+                color: replayCategoryColor,
                 weight: 6,
                 opacity: 0.95,
                 pane: routePaneName
             }).addTo(map);
             replayMarker = L.circleMarker(firstLatLng, {
                 radius: 10,
-                color: "#7c2d12",
+                color: replayCategoryColor,
                 fillColor: "#facc15",
                 fillOpacity: 0.95,
                 opacity: 1,
@@ -1695,11 +1983,13 @@
 
         clearFilterButton.addEventListener("click", () => {
             vehicleSelect.value = "";
+            categoryFilterSelect.value = "";
             filterStartInput.value = "";
             filterEndInput.value = "";
             tripSelect.value = "";
             selectedTripId = null;
             isCategoryEditMode = false;
+            categoryEditTripId = null;
             tripIdInput.value = "";
             loadAllTrips();
         });
@@ -1724,15 +2014,6 @@
             }
         });
 
-        tripSummary.addEventListener("submit", (event) => {
-            if (event.target.id !== "trip-category-form") {
-                return;
-            }
-
-            event.preventDefault();
-            saveTripCategory();
-        });
-
         centerRouteButton.addEventListener("click", () => {
             centerRoute();
         });
@@ -1753,8 +2034,13 @@
         vehicleSelect.addEventListener("change", () => {
             selectedTripId = null;
             isCategoryEditMode = false;
+            categoryEditTripId = null;
             tripIdInput.value = "";
             tripSelect.value = "";
+            loadAllTrips();
+        });
+
+        categoryFilterSelect.addEventListener("change", () => {
             loadAllTrips();
         });
 
@@ -1782,6 +2068,7 @@
             }
         });
 
+        renderCategoryLegend();
         loadAllTrips();
     </script>
 </body>
