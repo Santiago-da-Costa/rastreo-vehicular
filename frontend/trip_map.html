@@ -125,6 +125,18 @@
             gap: 6px;
         }
 
+        .trip-category-map-popup {
+            display: grid;
+            gap: 8px;
+            min-width: 170px;
+        }
+
+        .trip-category-map-popup-title {
+            margin: 0;
+            font-size: 0.84rem;
+            font-weight: bold;
+        }
+
         .trip-summary-button {
             padding: 4px 8px;
             font-size: 0.72rem;
@@ -711,6 +723,16 @@
 
             return currentTripsWithPoints.find(({ trip }) => {
                 return String(trip.id) === String(selectedTripId);
+            }) || null;
+        }
+
+        function getTripItemById(tripId) {
+            if (tripId == null) {
+                return null;
+            }
+
+            return currentTripsWithPoints.find(({ trip }) => {
+                return String(trip.id) === String(tripId);
             }) || null;
         }
 
@@ -1358,6 +1380,60 @@
             return refreshedTrip;
         }
 
+        async function saveTripCategoryValue(tripId, categoria, { onSavingChange = null } = {}) {
+            const selectedItem = getTripItemById(tripId);
+            const trimmedCategory = String(categoria || "").trim();
+            if (!selectedItem || isSavingTripCategory) {
+                return null;
+            }
+
+            if (!trimmedCategory) {
+                setMessage("La categoria no puede quedar vacia.", true);
+                return null;
+            }
+
+            isSavingTripCategory = true;
+            pendingCategoryValue = trimmedCategory;
+            pendingCategoryTripId = tripId;
+            if (onSavingChange) {
+                onSavingChange(true);
+            }
+            syncTripCategoryEditorState(selectedItem.trip);
+            setMessage("Guardando categoria del recorrido...");
+
+            const wasAutoRefreshEnabled = autoRefreshInput.checked;
+            stopAutoRefresh();
+            beginDataLoad();
+
+            try {
+                await updateTripCategory(tripId, trimmedCategory);
+                const refreshedTrip = await refreshAfterCategorySave(tripId);
+                isCategoryEditMode = false;
+                categoryEditTripId = null;
+                pendingCategoryValue = null;
+                pendingCategoryTripId = null;
+                redrawCurrentMap();
+                setMessage(`Categoria actualizada para el recorrido ${refreshedTrip.id}: ${getTripClassification(refreshedTrip)}.`);
+                return refreshedTrip;
+            } catch (error) {
+                setMessage("No se pudo actualizar la categoria del recorrido.", true);
+                renderTripSummary(null);
+                return null;
+            } finally {
+                isSavingTripCategory = false;
+                if (onSavingChange) {
+                    onSavingChange(false);
+                }
+                const currentSelectedItem = getSelectedTripItem();
+                if (isCategoryEditMode && currentSelectedItem) {
+                    syncTripCategoryEditorState(currentSelectedItem.trip);
+                }
+                if (wasAutoRefreshEnabled) {
+                    startAutoRefresh();
+                }
+            }
+        }
+
         async function saveTripCategory() {
             console.log("GUARDAR CATEGORIA CLICK");
             const selectedItem = getSelectedTripItem();
@@ -1374,39 +1450,92 @@
                 return;
             }
 
-            const tripId = selectedItem.trip.id;
-            isSavingTripCategory = true;
-            pendingCategoryValue = categoria;
-            pendingCategoryTripId = tripId;
-            syncTripCategoryEditorState(selectedItem.trip);
-            setMessage("Guardando categoria del recorrido...");
+            await saveTripCategoryValue(selectedItem.trip.id, categoria);
+        }
 
-            const wasAutoRefreshEnabled = autoRefreshInput.checked;
-            stopAutoRefresh();
-            beginDataLoad();
+        function buildTripCategoryPopupContent(tripId) {
+            const tripItem = getTripItemById(tripId);
+            const wrapper = document.createElement("form");
+            wrapper.className = "trip-category-map-popup";
 
-            try {
-                await updateTripCategory(tripId, categoria);
-                const refreshedTrip = await refreshAfterCategorySave(tripId);
-                isCategoryEditMode = false;
-                categoryEditTripId = null;
-                pendingCategoryValue = null;
-                pendingCategoryTripId = null;
-                redrawCurrentMap();
-                setMessage(`Categoria actualizada para el recorrido ${refreshedTrip.id}: ${getTripClassification(refreshedTrip)}.`);
-            } catch (error) {
-                setMessage("No se pudo actualizar la categoria del recorrido.", true);
-                renderTripSummary(null);
-            } finally {
-                isSavingTripCategory = false;
-                const currentSelectedItem = getSelectedTripItem();
-                if (isCategoryEditMode && currentSelectedItem) {
-                    syncTripCategoryEditorState(currentSelectedItem.trip);
+            const title = document.createElement("p");
+            title.className = "trip-category-map-popup-title";
+            title.textContent = `Cambiar categoria - Recorrido ${tripId}`;
+
+            const select = document.createElement("select");
+            select.className = "trip-category-input";
+            select.required = true;
+            const selectedCategory = getEditableTripCategory(tripItem ? tripItem.trip : null);
+            tripCategoryOptions.forEach((category) => {
+                const option = document.createElement("option");
+                option.value = category;
+                option.textContent = category;
+                option.selected = category === selectedCategory;
+                select.appendChild(option);
+            });
+
+            const actions = document.createElement("div");
+            actions.className = "trip-category-edit-actions";
+
+            const saveButton = document.createElement("button");
+            saveButton.className = "trip-summary-button";
+            saveButton.type = "submit";
+            saveButton.textContent = "Guardar";
+
+            const cancelButton = document.createElement("button");
+            cancelButton.className = "trip-summary-button secondary-button";
+            cancelButton.type = "button";
+            cancelButton.textContent = "Cancelar";
+
+            actions.append(saveButton, cancelButton);
+            wrapper.append(title, select, actions);
+
+            cancelButton.addEventListener("click", () => {
+                if (!isSavingTripCategory) {
+                    map.closePopup();
                 }
-                if (wasAutoRefreshEnabled) {
-                    startAutoRefresh();
+            });
+
+            wrapper.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const savedTrip = await saveTripCategoryValue(tripId, select.value, {
+                    onSavingChange: (isSaving) => {
+                        select.disabled = isSaving;
+                        saveButton.disabled = isSaving;
+                        cancelButton.disabled = isSaving;
+                        saveButton.textContent = isSaving ? "Guardando..." : "Guardar";
+                    }
+                });
+
+                if (savedTrip) {
+                    map.closePopup();
+                } else {
+                    select.focus();
                 }
+            });
+
+            return wrapper;
+        }
+
+        function openTripCategoryPopup(tripId, latLng) {
+            if (tripId == null) {
+                return;
             }
+
+            selectTrip(tripId, false);
+            const popup = L.popup()
+                .setLatLng(latLng)
+                .setContent(buildTripCategoryPopupContent(tripId));
+            popup.openOn(map);
+        }
+
+        function handleRouteContextMenu(event, tripId) {
+            if (event.originalEvent) {
+                L.DomEvent.preventDefault(event.originalEvent);
+                L.DomEvent.stopPropagation(event.originalEvent);
+            }
+
+            openTripCategoryPopup(tripId, event.latlng);
         }
 
         function getChronologicalPoints(points) {
@@ -1474,6 +1603,7 @@
 
                 if (tripId != null) {
                     line.on("click", () => selectTrip(tripId, false));
+                    line.on("contextmenu", (event) => handleRouteContextMenu(event, tripId));
                 }
 
                 if (isSelectedTrip(tripId)) {
