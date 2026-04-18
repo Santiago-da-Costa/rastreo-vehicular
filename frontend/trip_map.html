@@ -113,7 +113,8 @@
         }
 
         .trip-category-actions,
-        .trip-category-edit-actions {
+        .trip-category-edit-actions,
+        .trip-manual-delete-actions {
             display: flex;
             gap: 6px;
             align-items: center;
@@ -137,9 +138,25 @@
             font-weight: bold;
         }
 
+        .trip-map-actions-note {
+            margin: 0;
+            color: #3c4856;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .trip-map-actions-divider {
+            height: 1px;
+            background: #d7dde3;
+        }
+
         .trip-summary-button {
             padding: 4px 8px;
             font-size: 0.72rem;
+        }
+
+        .trip-summary-button.danger-button {
+            background: #b42318;
         }
 
         .trip-category-input {
@@ -206,6 +223,7 @@
             min-height: 0;
             display: flex;
             flex-direction: column;
+            position: relative;
         }
 
         #map {
@@ -291,6 +309,100 @@
 
         .split-mode-button.active {
             background: #b42318;
+        }
+
+        .manual-draw-button.active {
+            background: #b42318;
+        }
+
+        .pin-vehicle-button.active {
+            background: #b42318;
+        }
+
+        .live-tracking-status {
+            margin: 0;
+            color: #3c4856;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .live-tracking-status.error {
+            color: #b42318;
+        }
+
+        .live-vehicle-label {
+            color: #0f172a;
+            font-size: 11px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.95);
+            white-space: nowrap;
+        }
+
+        .pinned-vehicle-panel {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 650;
+            width: min(240px, calc(100% - 24px));
+            display: none;
+            gap: 5px;
+            padding: 10px 12px;
+            border: 1px solid rgba(15, 23, 42, 0.16);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.94);
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.16);
+            color: #1f2933;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .pinned-vehicle-panel.visible {
+            display: grid;
+        }
+
+        .pinned-vehicle-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 0.88rem;
+            font-weight: bold;
+        }
+
+        .pinned-vehicle-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 6px;
+        }
+
+        .pinned-vehicle-label {
+            color: #52616f;
+            font-weight: bold;
+        }
+
+        .manual-draw-status {
+            margin: 0;
+            color: #3c4856;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .manual-draw-status.active {
+            color: #1d7a8c;
+            font-weight: bold;
+        }
+
+        .auto-refresh-status {
+            color: #64748b;
+            font-size: 0.85rem;
+            line-height: 1.35;
+            margin: 0;
+        }
+
+        .auto-refresh-status.paused {
+            color: #92400e;
+        }
+
+        #map.manual-draw-active {
+            cursor: crosshair;
         }
 
         .hidden-control {
@@ -392,6 +504,39 @@
                     </section>
                 </form>
 
+                <section class="control-group" aria-labelledby="live-tracking-title">
+                    <h3 class="control-group-title" id="live-tracking-title">Seguimiento en vivo</h3>
+                    <button id="pin-vehicle-button" class="secondary-button pin-vehicle-button" type="button" disabled>Fijar en vehiculo</button>
+                    <p class="live-tracking-status" id="live-tracking-status">Sin posicion actual disponible.</p>
+                </section>
+
+                <section class="control-group" aria-labelledby="manual-draw-title">
+                    <h3 class="control-group-title" id="manual-draw-title">Dibujar recorrido</h3>
+                    <div class="field">
+                        <label for="manual-vehicle-select">Vehiculo</label>
+                        <select id="manual-vehicle-select">
+                            <option value="">Elegir vehiculo</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="manual-category-select">Categoria</label>
+                        <select id="manual-category-select">
+                            <option value="">Elegir categoria</option>
+                            <option value="Trabajo">Trabajo</option>
+                            <option value="Ocio">Ocio</option>
+                            <option value="Personal">Personal</option>
+                            <option value="Otro">Otro</option>
+                        </select>
+                    </div>
+                    <button id="start-manual-draw-button" class="manual-draw-button" type="button">Iniciar dibujo</button>
+                    <div class="button-stack">
+                        <button id="save-manual-trip-button" type="button" disabled>Guardar recorrido</button>
+                        <button id="undo-manual-point-button" class="secondary-button" type="button" disabled>Deshacer ultimo punto</button>
+                        <button id="cancel-manual-draw-button" class="secondary-button" type="button" disabled>Cancelar dibujo</button>
+                    </div>
+                    <p class="manual-draw-status" id="manual-draw-status">Elegir vehiculo y categoria antes de dibujar.</p>
+                </section>
+
                 <div class="trip-summary" id="trip-summary" aria-live="polite"></div>
 
                 <section class="control-group" aria-labelledby="category-legend-title">
@@ -429,12 +574,14 @@
                         <input id="auto-refresh" type="checkbox">
                         Actualizar automáticamente
                     </label>
+                    <p class="auto-refresh-status" id="auto-refresh-status"></p>
                     <div class="message" id="message" aria-live="polite"></div>
                 </section>
             </div>
         </aside>
         <section class="map-content" aria-label="Mapa y analisis del recorrido">
             <div id="map"></div>
+            <aside class="pinned-vehicle-panel" id="pinned-vehicle-panel" aria-live="polite"></aside>
             <section class="speed-chart-panel" aria-labelledby="speed-chart-title">
                 <h3 class="speed-chart-title" id="speed-chart-title">Velocidad vs distancia</h3>
                 <div class="speed-chart-box">
@@ -467,10 +614,21 @@
         const loadTripButton = document.getElementById("load-trip-button");
         const centerRouteButton = document.getElementById("center-route-button");
         const splitTripButton = document.getElementById("split-trip-button");
+        const manualVehicleSelect = document.getElementById("manual-vehicle-select");
+        const manualCategorySelect = document.getElementById("manual-category-select");
+        const startManualDrawButton = document.getElementById("start-manual-draw-button");
+        const saveManualTripButton = document.getElementById("save-manual-trip-button");
+        const undoManualPointButton = document.getElementById("undo-manual-point-button");
+        const cancelManualDrawButton = document.getElementById("cancel-manual-draw-button");
+        const manualDrawStatus = document.getElementById("manual-draw-status");
         const replayButton = document.getElementById("replay-button");
         const pauseReplayButton = document.getElementById("pause-replay-button");
         const stopReplayButton = document.getElementById("stop-replay-button");
         const autoRefreshInput = document.getElementById("auto-refresh");
+        const autoRefreshStatus = document.getElementById("auto-refresh-status");
+        const pinVehicleButton = document.getElementById("pin-vehicle-button");
+        const liveTrackingStatus = document.getElementById("live-tracking-status");
+        const pinnedVehiclePanel = document.getElementById("pinned-vehicle-panel");
         const message = document.getElementById("message");
         const tripSummary = document.getElementById("trip-summary");
         const categoryLegend = document.getElementById("category-legend");
@@ -484,13 +642,19 @@
 
         const routePaneName = "route-pane";
         const pointPaneName = "point-pane";
+        const livePaneName = "live-pane";
         map.createPane(routePaneName);
         map.createPane(pointPaneName);
+        map.createPane(livePaneName);
         map.getPane(routePaneName).style.zIndex = 410;
         map.getPane(pointPaneName).style.zIndex = 420;
+        map.getPane(livePaneName).style.zIndex = 500;
 
         let pointLayer = L.layerGroup().addTo(map);
+        let manualDrawLayer = L.layerGroup().addTo(map);
+        let liveVehicleLayer = L.layerGroup().addTo(map);
         let routeLine = null;
+        let manualDrawLine = null;
         let replayLine = null;
         let replayMarker = null;
         let replayTimer = null;
@@ -498,10 +662,24 @@
         let replayIndex = 0;
         let replayPaused = false;
         let autoRefreshTimer = null;
+        let isAutoRefreshLoading = false;
+        let livePositionsTimer = null;
+        let liveFreshnessTimer = null;
+        let isLivePositionsLoading = false;
+        let liveVehiclePositions = [];
+        let liveVehicleMarkers = new Map();
+        let isPinnedVehicleMode = false;
+        let livePinnedTripPoints = [];
+        let livePinnedTripId = null;
+        let livePinnedChartRequestKey = "";
+        let livePinnedChartRenderedKey = "";
+        let livePinnedChartLoadToken = 0;
+        let isPinnedLiveChartLoading = false;
         let currentPoints = [];
         let currentTrip = null;
         let currentTrips = [];
         let allTripsCache = [];
+        let allVehiclesCache = [];
         let currentTripId = null;
         let currentRouteSegments = [];
         let currentTripsWithPoints = [];
@@ -514,7 +692,13 @@
         let categoryEditTripId = null;
         let isSavingTripCategory = false;
         let isSplitMode = false;
+        let splitModeTripId = null;
         let isSplittingTrip = false;
+        let isManualDrawingMode = false;
+        let isSavingManualTrip = false;
+        let isDeletingManualTrip = false;
+        let manualDrawPoints = [];
+        let isMapPopupOpen = false;
         let pendingCategoryValue = null;
         let pendingCategoryTripId = null;
         let dataLoadVersion = 0;
@@ -526,6 +710,38 @@
             personal: { label: "Personal", color: "#f97316" },
             otro: { label: "Otro", color: "#7c3aed" },
             default: { label: unknownTripCategory, color: "#6b7280" }
+        };
+        const liveFreshnessThresholds = {
+            recent: 15,
+            intermediate: 60
+        };
+        const livePositionsRefreshMs = 5000;
+        const liveFreshnessRefreshMs = 1000;
+        const liveFreshnessStyles = {
+            recent: {
+                label: "reciente",
+                color: "#0f172a",
+                fillColor: "#22c55e",
+                fillOpacity: 0.96
+            },
+            intermediate: {
+                label: "intermedia",
+                color: "#0f172a",
+                fillColor: "#f59e0b",
+                fillOpacity: 0.92
+            },
+            old: {
+                label: "vieja",
+                color: "#475569",
+                fillColor: "#94a3b8",
+                fillOpacity: 0.82
+            },
+            unknown: {
+                label: "sin dato",
+                color: "#475569",
+                fillColor: "#cbd5e1",
+                fillOpacity: 0.76
+            }
         };
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -545,6 +761,74 @@
 
         function isStaleDataLoad(loadVersion) {
             return loadVersion !== dataLoadVersion;
+        }
+
+        function getAutoRefreshPauseReason() {
+            if (replayTimer || replayMarker || replayPaused) {
+                return "replay";
+            }
+
+            if (isCategoryEditMode || isSavingTripCategory || pendingCategoryTripId != null) {
+                return "edicion";
+            }
+
+            if (isSplitMode || isSplittingTrip) {
+                return "division";
+            }
+
+            if (isManualDrawingMode || isSavingManualTrip) {
+                return "dibujo";
+            }
+
+            if (isDeletingManualTrip) {
+                return "eliminacion";
+            }
+
+            if (isMapPopupOpen) {
+                return "popup";
+            }
+
+            return "";
+        }
+
+        function getAutoRefreshPauseLabel(reason) {
+            const labels = {
+                replay: "replay",
+                edicion: "edicion",
+                division: "division",
+                dibujo: "dibujo manual",
+                eliminacion: "eliminacion de recorrido manual",
+                popup: "menu contextual"
+            };
+
+            return labels[reason] || "una operacion en curso";
+        }
+
+        function updateAutoRefreshStatus(reason = "") {
+            if (!autoRefreshStatus) {
+                return;
+            }
+
+            if (!autoRefreshInput.checked) {
+                autoRefreshStatus.textContent = "";
+                autoRefreshStatus.classList.remove("paused");
+                return;
+            }
+
+            if (reason) {
+                autoRefreshStatus.textContent = `Auto-refresh pausado durante ${getAutoRefreshPauseLabel(reason)}.`;
+                autoRefreshStatus.classList.add("paused");
+                return;
+            }
+
+            autoRefreshStatus.textContent = "Auto-refresh activo.";
+            autoRefreshStatus.classList.remove("paused");
+        }
+
+        function canAutoRefreshNow() {
+            const reason = getAutoRefreshPauseReason();
+            updateAutoRefreshStatus(reason);
+            return !reason;
         }
 
         function getTripCategory(point = null) {
@@ -704,6 +988,151 @@
             });
         }
 
+        function timestampHasExplicitTimeZone(value) {
+            return /(?:z|[+-]\d{2}:?\d{2})$/i.test(value.trim());
+        }
+
+        function parseLiveTimestampMillis(value, now = Date.now()) {
+            if (!value) {
+                return null;
+            }
+
+            if (typeof value !== "string") {
+                const timestamp = new Date(value).getTime();
+                return Number.isNaN(timestamp) ? null : timestamp;
+            }
+
+            const trimmedTimestamp = value.trim();
+            if (!trimmedTimestamp) {
+                return null;
+            }
+
+            if (timestampHasExplicitTimeZone(trimmedTimestamp)) {
+                const timestamp = new Date(trimmedTimestamp).getTime();
+                return Number.isNaN(timestamp) ? null : timestamp;
+            }
+
+            const normalizedLocalTimestamp = trimmedTimestamp.replace(" ", "T");
+            const localTimestamp = new Date(normalizedLocalTimestamp).getTime();
+            const utcTimestamp = new Date(`${normalizedLocalTimestamp}Z`).getTime();
+            const validTimestamps = [localTimestamp, utcTimestamp].filter((timestamp) => !Number.isNaN(timestamp));
+
+            if (!validTimestamps.length) {
+                return null;
+            }
+
+            if (validTimestamps.length === 1) {
+                return validTimestamps[0];
+            }
+
+            const futureToleranceMs = 5000;
+            const pastTimestamps = validTimestamps.filter((timestamp) => timestamp <= now + futureToleranceMs);
+
+            if (pastTimestamps.length) {
+                return pastTimestamps.reduce((closestTimestamp, timestamp) => {
+                    const closestAgeMs = now - closestTimestamp;
+                    const ageMs = now - timestamp;
+                    if (ageMs >= 0 && (closestAgeMs < 0 || ageMs < closestAgeMs)) {
+                        return timestamp;
+                    }
+                    return closestTimestamp;
+                }, pastTimestamps[0]);
+            }
+
+            return Math.min(...validTimestamps);
+        }
+
+        function normalizeLiveVehiclePosition(position, now = Date.now()) {
+            return {
+                ...position,
+                _timestampMillis: parseLiveTimestampMillis(position ? position.timestamp : null, now)
+            };
+        }
+
+        function getLivePositionTimestampMillis(position) {
+            if (!position || !position.timestamp) {
+                return null;
+            }
+
+            if (typeof position._timestampMillis === "number" && !Number.isNaN(position._timestampMillis)) {
+                return position._timestampMillis;
+            }
+
+            return parseLiveTimestampMillis(position.timestamp);
+        }
+
+        function getLivePositionAgeSeconds(position, now = Date.now()) {
+            const timestamp = getLivePositionTimestampMillis(position);
+            if (timestamp == null) {
+                return null;
+            }
+
+            return Math.max(0, Math.floor((now - timestamp) / 1000));
+        }
+
+        function getLivePositionFreshness(position, now = Date.now()) {
+            const ageSeconds = getLivePositionAgeSeconds(position, now);
+            if (ageSeconds == null) {
+                return "unknown";
+            }
+
+            if (ageSeconds <= liveFreshnessThresholds.recent) {
+                return "recent";
+            }
+
+            if (ageSeconds <= liveFreshnessThresholds.intermediate) {
+                return "intermediate";
+            }
+
+            return "old";
+        }
+
+        function formatLiveAge(position, now = Date.now()) {
+            const ageSeconds = getLivePositionAgeSeconds(position, now);
+            if (ageSeconds == null) {
+                return "sin dato";
+            }
+
+            if (ageSeconds < 60) {
+                return `hace ${ageSeconds} s`;
+            }
+
+            const minutes = Math.floor(ageSeconds / 60);
+            const remainingSeconds = ageSeconds % 60;
+            if (minutes < 60) {
+                return remainingSeconds
+                    ? `hace ${minutes} min ${remainingSeconds} s`
+                    : `hace ${minutes} min`;
+            }
+
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            return remainingMinutes
+                ? `hace ${hours} h ${remainingMinutes} min`
+                : `hace ${hours} h`;
+        }
+
+        function getLiveMarkerStyle(position, now = Date.now()) {
+            const freshness = getLivePositionFreshness(position, now);
+            const freshnessStyle = liveFreshnessStyles[freshness] || liveFreshnessStyles.unknown;
+
+            return {
+                radius: freshness === "old" ? 10 : 11,
+                color: freshnessStyle.color,
+                fillColor: freshnessStyle.fillColor,
+                fillOpacity: freshnessStyle.fillOpacity,
+                opacity: 1,
+                weight: 4,
+                pane: livePaneName
+            };
+        }
+
+        function getLiveFreshnessLabel(position, now = Date.now()) {
+            const freshness = getLivePositionFreshness(position, now);
+            const freshnessStyle = liveFreshnessStyles[freshness] || liveFreshnessStyles.unknown;
+            return freshnessStyle.label;
+        }
+
         function getTripStartTime(trip) {
             return trip ? trip.hora_inicio || trip.start_time : null;
         }
@@ -714,6 +1143,10 @@
 
         function getTripVehicleId(trip) {
             return trip ? trip.vehicle_id || trip.vehicleId || trip.vehiculo_id || trip.vehiculo : null;
+        }
+
+        function isManualTrip(trip) {
+            return Boolean(trip && (trip.is_manual === true || trip.is_manual === 1));
         }
 
         function getPointTripId(point) {
@@ -750,6 +1183,364 @@
 
         function getSelectedVehicleId() {
             return vehicleSelect.value;
+        }
+
+        function getVehicleDisplayName(vehicleId, fallbackName = "") {
+            const vehicle = allVehiclesCache.find((item) => String(item.id) === String(vehicleId));
+            return fallbackName || (vehicle ? vehicle.nombre : `Vehiculo ${vehicleId}`);
+        }
+
+        function getPinnedLiveChartRequestKey(position) {
+            if (!position || position.trip_id == null) {
+                return "";
+            }
+
+            return [
+                position.trip_id,
+                position.timestamp || "",
+                position.lat,
+                position.lon,
+                position.speed == null ? "" : position.speed
+            ].join("|");
+        }
+
+        function getTripForLivePosition(position) {
+            if (!position) {
+                return null;
+            }
+
+            const cachedTrip = allTripsCache.find((trip) => String(trip.id) === String(position.trip_id));
+            if (cachedTrip) {
+                return cachedTrip;
+            }
+
+            return {
+                id: position.trip_id,
+                vehicle_id: position.vehicle_id,
+                categoria: position.categoria,
+                status: position.is_active ? "active" : undefined
+            };
+        }
+
+        function resetPinnedLiveChartState() {
+            livePinnedTripPoints = [];
+            livePinnedTripId = null;
+            livePinnedChartRequestKey = "";
+            livePinnedChartRenderedKey = "";
+            livePinnedChartLoadToken += 1;
+            isPinnedLiveChartLoading = false;
+        }
+
+        function renderNormalSpeedDistanceChart() {
+            const selectedItem = getSelectedTripItem();
+            if (!selectedItem) {
+                clearSpeedDistanceChart("Selecciona un recorrido para ver el grafico.");
+                return;
+            }
+
+            renderSpeedDistanceChart(getChronologicalPoints(selectedItem.points));
+        }
+
+        function renderPinnedLiveChartFromCache(emptyMessage = "Esperando mas puntos para el grafico en vivo.") {
+            if (!isPinnedVehicleMode) {
+                return;
+            }
+
+            if (!livePinnedTripPoints.length) {
+                clearSpeedDistanceChart(emptyMessage);
+                return;
+            }
+
+            renderSpeedDistanceChart(livePinnedTripPoints, {
+                emptyMessage: "Esperando mas puntos para el grafico en vivo."
+            });
+        }
+
+        function getFilteredLiveVehiclePositions() {
+            const selectedVehicleId = getSelectedVehicleId();
+            if (!selectedVehicleId) {
+                return liveVehiclePositions;
+            }
+
+            return liveVehiclePositions.filter((position) => {
+                return String(position.vehicle_id) === String(selectedVehicleId);
+            });
+        }
+
+        function getSelectedLiveVehiclePosition() {
+            const selectedVehicleId = getSelectedVehicleId();
+            if (!selectedVehicleId) {
+                return null;
+            }
+
+            return liveVehiclePositions.find((position) => {
+                return String(position.vehicle_id) === String(selectedVehicleId);
+            }) || null;
+        }
+
+        function buildLivePositionPopupContent(position, now = Date.now()) {
+            const freshnessLabel = getLiveFreshnessLabel(position, now);
+            return [
+                `<strong>${escapeHtml(getVehicleDisplayName(position.vehicle_id, position.vehicle_name))}</strong>`,
+                `Trip activo: ${escapeHtml(position.trip_id)}`,
+                `Categoria: ${escapeHtml(position.categoria || unknownTripCategory)}`,
+                `Velocidad: ${escapeHtml(formatSpeedMetersPerSecond(position.speed))}`,
+                `Actualizado: ${escapeHtml(formatLiveAge(position, now))}`,
+                `Estado: ${escapeHtml(freshnessLabel)}`,
+                `Fecha: ${escapeHtml(formatDateTime(position.timestamp))}`
+            ].join("<br>");
+        }
+
+        function setLiveTrackingStatus(text, isError = false) {
+            liveTrackingStatus.textContent = text;
+            liveTrackingStatus.classList.toggle("error", isError);
+        }
+
+        function updatePinnedVehiclePanel(position = getSelectedLiveVehiclePosition(), now = Date.now()) {
+            if (!isPinnedVehicleMode || !position) {
+                pinnedVehiclePanel.classList.remove("visible");
+                pinnedVehiclePanel.innerHTML = "";
+                return;
+            }
+
+            const vehicleName = getVehicleDisplayName(position.vehicle_id, position.vehicle_name);
+            const freshnessLabel = getLiveFreshnessLabel(position, now);
+            pinnedVehiclePanel.innerHTML = [
+                `<p class="pinned-vehicle-title">${escapeHtml(vehicleName)}</p>`,
+                '<div class="pinned-vehicle-row">',
+                '<span class="pinned-vehicle-label">Velocidad</span>',
+                `<span>${escapeHtml(formatSpeedMetersPerSecond(position.speed))}</span>`,
+                '</div>',
+                '<div class="pinned-vehicle-row">',
+                '<span class="pinned-vehicle-label">Categoria</span>',
+                `<span>${escapeHtml(position.categoria || unknownTripCategory)}</span>`,
+                '</div>',
+                '<div class="pinned-vehicle-row">',
+                '<span class="pinned-vehicle-label">Actualizacion</span>',
+                `<span>${escapeHtml(formatLiveAge(position, now))} (${escapeHtml(freshnessLabel)})</span>`,
+                '</div>'
+            ].join("");
+            pinnedVehiclePanel.classList.add("visible");
+        }
+
+        function bringLiveMarkersToFront() {
+            liveVehicleMarkers.forEach((marker) => {
+                marker.bringToFront();
+            });
+        }
+
+        function updatePinnedVehicleView() {
+            const position = getSelectedLiveVehiclePosition();
+            updatePinnedVehiclePanel(position);
+
+            if (!isPinnedVehicleMode || !position) {
+                return;
+            }
+
+            map.setView(L.latLng(position.lat, position.lon), map.getZoom(), { animate: false });
+            updatePinnedLiveChart();
+        }
+
+        function renderLiveVehiclePositions() {
+            liveVehicleLayer.clearLayers();
+            liveVehicleMarkers = new Map();
+
+            const visiblePositions = getFilteredLiveVehiclePositions();
+            visiblePositions.forEach((position) => {
+                const latLng = L.latLng(position.lat, position.lon);
+                const marker = L.circleMarker(latLng, getLiveMarkerStyle(position));
+                marker.bindPopup(buildLivePositionPopupContent(position));
+                marker.bindTooltip(getVehicleDisplayName(position.vehicle_id, position.vehicle_name), {
+                    permanent: true,
+                    direction: "top",
+                    offset: [0, -10],
+                    className: "live-vehicle-label"
+                });
+                marker.addTo(liveVehicleLayer);
+                marker.bringToFront();
+                liveVehicleMarkers.set(String(position.vehicle_id), marker);
+            });
+
+            bringLiveMarkersToFront();
+            updateLiveTrackingControls();
+            updatePinnedVehicleView();
+        }
+
+        function refreshLiveFreshnessVisuals() {
+            const now = Date.now();
+            const visiblePositions = getFilteredLiveVehiclePositions();
+
+            visiblePositions.forEach((position) => {
+                const marker = liveVehicleMarkers.get(String(position.vehicle_id));
+                if (!marker) {
+                    return;
+                }
+
+                marker.setStyle(getLiveMarkerStyle(position, now));
+                marker.setPopupContent(buildLivePositionPopupContent(position, now));
+                marker.bringToFront();
+            });
+
+            bringLiveMarkersToFront();
+            updateLiveTrackingControls(now);
+            updatePinnedVehiclePanel(undefined, now);
+        }
+
+        function updateLiveTrackingControls(now = Date.now()) {
+            const selectedVehicleId = getSelectedVehicleId();
+            const selectedPosition = getSelectedLiveVehiclePosition();
+            const visiblePositions = getFilteredLiveVehiclePositions();
+
+            if (!selectedVehicleId) {
+                if (isPinnedVehicleMode) {
+                    setPinnedVehicleMode(false);
+                }
+                pinVehicleButton.disabled = true;
+                setLiveTrackingStatus(
+                    visiblePositions.length
+                        ? `Posiciones actuales visibles: ${visiblePositions.length}. Elegir un vehiculo para fijar.`
+                        : "Sin posiciones actuales disponibles."
+                );
+                return;
+            }
+
+            pinVehicleButton.disabled = !selectedPosition;
+            if (selectedPosition) {
+                setLiveTrackingStatus(
+                    `Posicion actual disponible para ${getVehicleDisplayName(selectedVehicleId, selectedPosition.vehicle_name)}. ` +
+                    `Actualizado ${formatLiveAge(selectedPosition, now)} (${getLiveFreshnessLabel(selectedPosition, now)}).`
+                );
+            } else {
+                if (isPinnedVehicleMode) {
+                    setPinnedVehicleMode(false);
+                }
+                setLiveTrackingStatus("Sin posicion actual disponible para el vehiculo seleccionado.", true);
+            }
+        }
+
+        function setPinnedVehicleMode(active) {
+            const wasPinnedVehicleMode = isPinnedVehicleMode;
+            isPinnedVehicleMode = Boolean(active);
+            if (wasPinnedVehicleMode !== isPinnedVehicleMode) {
+                resetPinnedLiveChartState();
+            }
+            pinVehicleButton.classList.toggle("active", isPinnedVehicleMode);
+            pinVehicleButton.textContent = isPinnedVehicleMode ? "Dejar de fijar" : "Fijar en vehiculo";
+            if (isPinnedVehicleMode) {
+                renderPinnedLiveChartFromCache("Cargando grafico del recorrido activo...");
+            } else {
+                renderNormalSpeedDistanceChart();
+            }
+            updatePinnedVehicleView();
+        }
+
+        async function updatePinnedLiveChart({ force = false } = {}) {
+            if (!isPinnedVehicleMode) {
+                return;
+            }
+
+            const position = getSelectedLiveVehiclePosition();
+            if (!position) {
+                renderPinnedLiveChartFromCache("Sin posicion actual para actualizar el grafico en vivo.");
+                return;
+            }
+
+            if (position.trip_id == null) {
+                resetPinnedLiveChartState();
+                clearSpeedDistanceChart("El vehiculo fijado no tiene un trip activo para graficar.");
+                return;
+            }
+
+            const requestKey = getPinnedLiveChartRequestKey(position);
+            if (!force && requestKey && requestKey === livePinnedChartRenderedKey) {
+                return;
+            }
+
+            if (!force && isPinnedLiveChartLoading && requestKey === livePinnedChartRequestKey) {
+                return;
+            }
+
+            const loadToken = livePinnedChartLoadToken + 1;
+            livePinnedChartLoadToken = loadToken;
+            livePinnedChartRequestKey = requestKey;
+            isPinnedLiveChartLoading = true;
+
+            if (!livePinnedTripPoints.length || String(livePinnedTripId) !== String(position.trip_id)) {
+                renderPinnedLiveChartFromCache("Cargando grafico del recorrido activo...");
+            }
+
+            try {
+                const trip = getTripForLivePosition(position);
+                const points = await fetchTripPoints(position.trip_id);
+                if (
+                    loadToken !== livePinnedChartLoadToken
+                    || !isPinnedVehicleMode
+                    || String(getSelectedVehicleId()) !== String(position.vehicle_id)
+                ) {
+                    return;
+                }
+
+                livePinnedTripId = position.trip_id;
+                livePinnedTripPoints = getChronologicalPoints(points).map((point) => ({
+                    ...point,
+                    _trip: trip
+                }));
+                livePinnedChartRenderedKey = requestKey;
+                renderPinnedLiveChartFromCache();
+            } catch (error) {
+                if (loadToken === livePinnedChartLoadToken && isPinnedVehicleMode) {
+                    clearSpeedDistanceChart("No se pudo cargar el grafico del recorrido activo.");
+                }
+            } finally {
+                if (loadToken === livePinnedChartLoadToken) {
+                    isPinnedLiveChartLoading = false;
+                }
+            }
+        }
+
+        async function fetchLiveVehiclePositions() {
+            const response = await fetch(`${apiBaseUrl}/vehicles/live`);
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        async function loadLiveVehiclePositions({ showErrors = false } = {}) {
+            if (isLivePositionsLoading || !canAutoRefreshNow()) {
+                return;
+            }
+
+            isLivePositionsLoading = true;
+            try {
+                const now = Date.now();
+                liveVehiclePositions = (await fetchLiveVehiclePositions())
+                    .map((position) => normalizeLiveVehiclePosition(position, now));
+                renderLiveVehiclePositions();
+            } catch (error) {
+                if (showErrors) {
+                    setLiveTrackingStatus("No se pudo cargar la posicion actual.", true);
+                }
+            } finally {
+                isLivePositionsLoading = false;
+            }
+        }
+
+        function startLivePositionsRefresh() {
+            if (livePositionsTimer) {
+                if (!liveFreshnessTimer) {
+                    liveFreshnessTimer = setInterval(refreshLiveFreshnessVisuals, liveFreshnessRefreshMs);
+                }
+                return;
+            }
+
+            livePositionsTimer = setInterval(() => {
+                loadLiveVehiclePositions();
+            }, livePositionsRefreshMs);
+
+            liveFreshnessTimer = setInterval(refreshLiveFreshnessVisuals, liveFreshnessRefreshMs);
         }
 
         function getSelectedCategoryKey() {
@@ -791,8 +1582,51 @@
 
             if (vehicleIds.some((vehicleId) => String(vehicleId) === String(selectedVehicleId))) {
                 vehicleSelect.value = selectedVehicleId;
+            } else if (selectedVehicleId) {
+                const option = document.createElement("option");
+                option.value = selectedVehicleId;
+                option.textContent = `VehÃ­culo ${selectedVehicleId}`;
+                vehicleSelect.appendChild(option);
+                vehicleSelect.value = selectedVehicleId;
             } else {
                 vehicleSelect.value = "";
+            }
+        }
+
+        function populateManualVehicleSelect(vehicles = [], trips = []) {
+            const selectedVehicleId = manualVehicleSelect.value;
+            const vehiclesById = new Map();
+
+            vehicles.forEach((vehicle) => {
+                if (vehicle && vehicle.id != null) {
+                    vehiclesById.set(String(vehicle.id), vehicle);
+                }
+            });
+
+            trips.map(getTripVehicleId)
+                .filter((value) => value != null && value !== "")
+                .forEach((vehicleId) => {
+                    const key = String(vehicleId);
+                    if (!vehiclesById.has(key)) {
+                        vehiclesById.set(key, { id: vehicleId });
+                    }
+                });
+
+            const vehiclesList = [...vehiclesById.values()]
+                .sort((a, b) => String(a.id).localeCompare(String(b.id), "es", { numeric: true }));
+
+            manualVehicleSelect.innerHTML = '<option value="">Elegir vehiculo</option>';
+            vehiclesList.forEach((vehicle) => {
+                const option = document.createElement("option");
+                option.value = vehicle.id;
+                const name = vehicle.nombre ? ` - ${vehicle.nombre}` : "";
+                const plate = vehicle.matricula ? ` (${vehicle.matricula})` : "";
+                option.textContent = `Vehiculo ${vehicle.id}${name}${plate}`;
+                manualVehicleSelect.appendChild(option);
+            });
+
+            if (vehiclesList.some((vehicle) => String(vehicle.id) === String(selectedVehicleId))) {
+                manualVehicleSelect.value = selectedVehicleId;
             }
         }
 
@@ -1085,7 +1919,11 @@
 
             if (!selectedSummaryItem) {
                 tripSummary.innerHTML = '<p class="trip-summary-empty">Ningún recorrido seleccionado</p>';
-                clearSpeedDistanceChart("Selecciona un recorrido para ver el gráfico.");
+                if (isPinnedVehicleMode) {
+                    renderPinnedLiveChartFromCache();
+                } else {
+                    clearSpeedDistanceChart("Selecciona un recorrido para ver el gráfico.");
+                }
                 return;
             }
 
@@ -1104,6 +1942,13 @@
             const summaryOrderedPoints = getChronologicalPoints(summaryPoints);
             const summaryStartTime = getTripStartTime(summaryTrip) || (summaryOrderedPoints[0] ? summaryOrderedPoints[0].timestamp : null);
             const summaryEndTime = getTripEndTime(summaryTrip) || (summaryOrderedPoints.length ? summaryOrderedPoints[summaryOrderedPoints.length - 1].timestamp : null);
+            const manualDeleteActionHtml = isManualTrip(summaryTrip)
+                ? [
+                    '<div class="trip-manual-delete-actions">',
+                    `<button class="trip-summary-button danger-button" type="button" data-manual-delete-action="delete"${isDeletingManualTrip ? " disabled" : ""}>${isDeletingManualTrip ? "Eliminando..." : "Eliminar recorrido manual"}</button>`,
+                    '</div>'
+                ].join("")
+                : "";
 
             tripSummary.innerHTML = [
                 '<p class="trip-summary-title">Recorrido seleccionado</p>',
@@ -1118,10 +1963,15 @@
                 `<span>${formatDateTime(summaryEndTime)}</span>`,
                 '<span class="trip-summary-label">Clasificación:</span>',
                 `<div>${renderTripCategoryEditor(summaryTrip)}</div>`,
-                '</div>'
+                '</div>',
+                manualDeleteActionHtml
             ].join("");
             bindTripCategoryFormSubmit();
-            renderSpeedDistanceChart(summaryOrderedPoints);
+            if (isPinnedVehicleMode) {
+                renderPinnedLiveChartFromCache();
+            } else {
+                renderSpeedDistanceChart(summaryOrderedPoints);
+            }
         }
 
         function syncTripCategoryEditorState(summaryTrip) {
@@ -1153,7 +2003,11 @@
 
         function setSplitMode(active) {
             isSplitMode = Boolean(active);
+            if (!isSplitMode) {
+                splitModeTripId = null;
+            }
             splitTripButton.classList.toggle("active", isSplitMode);
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
             splitTripButton.textContent = isSplitMode ? "Cancelar división" : "Dividir recorrido";
         }
 
@@ -1173,9 +2027,10 @@
             isCategoryEditMode = false;
             categoryEditTripId = null;
             stopReplay();
+            splitModeTripId = selectedItem.trip.id;
             setSplitMode(true);
             renderTripSummary(null);
-            setMessage("Modo división activo: selecciona un nodo interior del recorrido elegido.");
+            setMessage("Seleccione nodo de división.");
         }
 
         function cancelSplitMode(showMessage = true) {
@@ -1191,17 +2046,16 @@
             });
         }
 
-        function validateSplitPoint(point) {
-            const selectedItem = getSelectedTripItem();
-            if (!selectedItem) {
+        function validateSplitPointForTripItem(tripItem, point) {
+            if (!tripItem) {
                 return "Selecciona un recorrido antes de dividir.";
             }
 
-            if (String(getPointTripId(point)) !== String(selectedItem.trip.id)) {
+            if (String(getPointTripId(point)) !== String(tripItem.trip.id)) {
                 return "El nodo debe pertenecer al recorrido seleccionado.";
             }
 
-            const orderedPoints = getChronologicalPoints(selectedItem.points);
+            const orderedPoints = getChronologicalPoints(tripItem.points);
             if (orderedPoints.length < 3) {
                 return "El recorrido necesita al menos 3 puntos para dividirse.";
             }
@@ -1212,6 +2066,13 @@
             }
 
             return "";
+        }
+
+        function validateSplitPoint(point) {
+            const splitTripItem = splitModeTripId == null
+                ? getSelectedTripItem()
+                : getTripItemById(splitModeTripId);
+            return validateSplitPointForTripItem(splitTripItem, point);
         }
 
         function buildSpeedDistanceSeries(points) {
@@ -1256,7 +2117,7 @@
             speedDistanceCanvas.style.display = "none";
         }
 
-        function renderSpeedDistanceChart(points) {
+        function renderSpeedDistanceChart(points, { emptyMessage = "El recorrido no tiene suficientes datos de velocidad para graficar." } = {}) {
             if (typeof Chart === "undefined") {
                 clearSpeedDistanceChart("No se pudo cargar el gráfico.");
                 return;
@@ -1266,7 +2127,7 @@
             speedChartPointRefs = pointRefs;
 
             if (series.length < 2) {
-                clearSpeedDistanceChart("El recorrido no tiene suficientes datos de velocidad para graficar.");
+                clearSpeedDistanceChart(emptyMessage);
                 return;
             }
 
@@ -1352,6 +2213,16 @@
             return trip;
         }
 
+        async function fetchTripPoints(tripId) {
+            const response = await fetch(`${apiBaseUrl}/trips/${tripId}/points`);
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}`);
+            }
+
+            return response.json();
+        }
+
         async function fetchTrips() {
             const response = await fetch(`${apiBaseUrl}/trips`);
 
@@ -1361,6 +2232,58 @@
 
             const trips = await response.json();
             return trips;
+        }
+
+        async function fetchVehicles() {
+            const response = await fetch(`${apiBaseUrl}/vehicles`);
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        async function createManualTrip(payload) {
+            const response = await fetch(`${apiBaseUrl}/trips/manual`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                let detail = `Error ${response.status}`;
+                try {
+                    const errorBody = await response.json();
+                    detail = errorBody.detail || detail;
+                } catch (error) {
+                    // Keep the HTTP status when the backend does not return JSON.
+                }
+                throw new Error(detail);
+            }
+
+            return response.json();
+        }
+
+        async function deleteManualTrip(tripId) {
+            const response = await fetch(`${apiBaseUrl}/trips/${tripId}/manual`, {
+                method: "DELETE"
+            });
+
+            if (!response.ok) {
+                let detail = `Error ${response.status}`;
+                try {
+                    const errorBody = await response.json();
+                    detail = errorBody.detail || detail;
+                } catch (error) {
+                    // Keep the HTTP status when the backend does not return JSON.
+                }
+                throw new Error(detail);
+            }
+
+            return response.json();
         }
 
         async function updateTripCategory(tripId, categoria) {
@@ -1433,9 +2356,72 @@
             centerRoute();
         }
 
-        async function executeSplit(point) {
+        async function refreshAfterManualTripDelete() {
+            selectedTripId = null;
+            currentTripId = null;
+            currentTrip = null;
+            tripIdInput.value = "";
+            tripSelect.value = "";
+            isCategoryEditMode = false;
+            categoryEditTripId = null;
+            setSplitMode(false);
+            currentMode = "all";
+            await loadAllTrips({ fitMap: false, showMessages: false });
+        }
+
+        async function deleteSelectedManualTrip() {
             const selectedItem = getSelectedTripItem();
-            if (!selectedItem || isSplittingTrip) {
+            if (!selectedItem || isDeletingManualTrip || isSavingTripCategory || isSplittingTrip) {
+                return;
+            }
+
+            const tripId = selectedItem.trip.id;
+            if (!isManualTrip(selectedItem.trip)) {
+                setMessage("Solo se pueden eliminar recorridos manuales desde esta accion.", true);
+                return;
+            }
+
+            const confirmed = window.confirm(
+                "Eliminar este recorrido manual? Esta accion no se puede deshacer."
+            );
+            if (!confirmed) {
+                setMessage("Eliminacion cancelada.");
+                return;
+            }
+
+            const wasAutoRefreshEnabled = autoRefreshInput.checked;
+            stopAutoRefresh();
+            stopReplay();
+            beginDataLoad();
+            isDeletingManualTrip = true;
+            renderTripSummary(null);
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
+            setMessage("Eliminando recorrido manual...");
+
+            try {
+                await deleteManualTrip(tripId);
+                await refreshAfterManualTripDelete();
+                setMessage("Recorrido manual eliminado correctamente.");
+            } catch (error) {
+                setMessage(`No se pudo eliminar el recorrido manual: ${error.message}`, true);
+                renderTripSummary(null);
+            } finally {
+                isDeletingManualTrip = false;
+                if (selectedTripId != null) {
+                    renderTripSummary(null);
+                }
+                updateAutoRefreshStatus(getAutoRefreshPauseReason());
+                if (wasAutoRefreshEnabled) {
+                    startAutoRefresh();
+                }
+            }
+        }
+
+        async function executeSplit(point) {
+            const splitTripItem = splitModeTripId == null
+                ? getSelectedTripItem()
+                : getTripItemById(splitModeTripId);
+            if (!splitTripItem || isSplittingTrip) {
                 return;
             }
 
@@ -1445,17 +2431,19 @@
                 return;
             }
 
-            const tripId = selectedItem.trip.id;
+            const tripId = splitTripItem.trip.id;
             const confirmed = window.confirm(
                 `Dividir el recorrido ${tripId} en el punto ${point.id}?`
             );
             if (!confirmed) {
+                setSplitMode(false);
                 setMessage("División cancelada.");
                 return;
             }
 
             const wasAutoRefreshEnabled = autoRefreshInput.checked;
             stopAutoRefresh();
+            autoRefreshInput.checked = false;
             stopReplay();
             beginDataLoad();
             isSplittingTrip = true;
@@ -1496,6 +2484,7 @@
             if (select) {
                 select.focus();
             }
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
         }
 
         function cancelCategoryEdit() {
@@ -1508,6 +2497,7 @@
             pendingCategoryValue = null;
             pendingCategoryTripId = null;
             renderTripSummary(null);
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
         }
 
         async function refreshAfterCategorySave(tripId) {
@@ -1610,14 +2600,17 @@
             await saveTripCategoryValue(selectedItem.trip.id, categoria);
         }
 
-        function buildTripCategoryPopupContent(tripId) {
+        function buildTripActionsPopupContent(tripId) {
             const tripItem = getTripItemById(tripId);
             const wrapper = document.createElement("form");
             wrapper.className = "trip-category-map-popup";
 
             const title = document.createElement("p");
             title.className = "trip-category-map-popup-title";
-            title.textContent = `Cambiar categoria - Recorrido ${tripId}`;
+            title.textContent = `Recorrido ${tripId}`;
+
+            const categoryLabel = document.createElement("label");
+            categoryLabel.textContent = "Categoria";
 
             const select = document.createElement("select");
             select.className = "trip-category-input";
@@ -1637,7 +2630,7 @@
             const saveButton = document.createElement("button");
             saveButton.className = "trip-summary-button";
             saveButton.type = "submit";
-            saveButton.textContent = "Guardar";
+            saveButton.textContent = "Guardar categoria";
 
             const cancelButton = document.createElement("button");
             cancelButton.className = "trip-summary-button secondary-button";
@@ -1645,12 +2638,36 @@
             cancelButton.textContent = "Cancelar";
 
             actions.append(saveButton, cancelButton);
-            wrapper.append(title, select, actions);
+
+            const divider = document.createElement("div");
+            divider.className = "trip-map-actions-divider";
+
+            const splitNote = document.createElement("p");
+            splitNote.className = "trip-map-actions-note";
+            splitNote.textContent = "Elegí Dividir y luego hacé click en el nodo de corte.";
+
+            const splitButton = document.createElement("button");
+            splitButton.className = "trip-summary-button secondary-button";
+            splitButton.type = "button";
+            splitButton.textContent = "Dividir recorrido";
+            splitButton.disabled = isSplittingTrip || !tripItem;
+
+            wrapper.append(title, categoryLabel, select, actions, divider, splitNote, splitButton);
 
             cancelButton.addEventListener("click", () => {
                 if (!isSavingTripCategory) {
                     map.closePopup();
                 }
+            });
+
+            splitButton.addEventListener("click", () => {
+                if (isSplittingTrip) {
+                    return;
+                }
+
+                map.closePopup();
+                selectTrip(tripId, false);
+                enterSplitMode();
             });
 
             wrapper.addEventListener("submit", async (event) => {
@@ -1660,7 +2677,7 @@
                         select.disabled = isSaving;
                         saveButton.disabled = isSaving;
                         cancelButton.disabled = isSaving;
-                        saveButton.textContent = isSaving ? "Guardando..." : "Guardar";
+                        saveButton.textContent = isSaving ? "Guardando..." : "Guardar categoria";
                     }
                 });
 
@@ -1674,7 +2691,7 @@
             return wrapper;
         }
 
-        function openTripCategoryPopup(tripId, latLng) {
+        function openTripActionsPopup(tripId, latLng) {
             if (tripId == null) {
                 return;
             }
@@ -1682,7 +2699,7 @@
             selectTrip(tripId, false);
             const popup = L.popup()
                 .setLatLng(latLng)
-                .setContent(buildTripCategoryPopupContent(tripId));
+                .setContent(buildTripActionsPopupContent(tripId));
             popup.openOn(map);
         }
 
@@ -1692,7 +2709,7 @@
                 L.DomEvent.stopPropagation(event.originalEvent);
             }
 
-            openTripCategoryPopup(tripId, event.latlng);
+            openTripActionsPopup(tripId, event.latlng);
         }
 
         function getChronologicalPoints(points) {
@@ -1729,6 +2746,7 @@
             }
 
             restoreRouteLine();
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
         }
 
         function clearMap() {
@@ -1759,7 +2777,17 @@
                 const tripId = segment.length ? getPointTripId(segment[0]) : null;
 
                 if (tripId != null) {
-                    line.on("click", () => selectTrip(tripId, false));
+                    line.on("click", (event) => {
+                        if (isManualDrawingMode) {
+                            if (event.originalEvent) {
+                                L.DomEvent.stopPropagation(event.originalEvent);
+                            }
+                            addManualDrawPoint(event.latlng);
+                            return;
+                        }
+
+                        selectTrip(tripId, false);
+                    });
                     line.on("contextmenu", (event) => handleRouteContextMenu(event, tripId));
                 }
 
@@ -1835,12 +2863,26 @@
                 L.DomEvent.stopPropagation(event.originalEvent);
             }
 
+            if (isManualDrawingMode) {
+                addManualDrawPoint(event.latlng);
+                return;
+            }
+
             if (isSplitMode) {
                 executeSplit(point);
                 return;
             }
 
             marker.openPopup();
+        }
+
+        function handlePointContextMenu(event, point) {
+            if (event.originalEvent) {
+                L.DomEvent.preventDefault(event.originalEvent);
+                L.DomEvent.stopPropagation(event.originalEvent);
+            }
+
+            openTripActionsPopup(getPointTripId(point), event.latlng);
         }
 
         function drawPoints(points, fitMap = true) {
@@ -1867,6 +2909,7 @@
                 const marker = L.circleMarker(getPointLatLng(point), getPointStyle(point, index, orderedPoints.length));
                 marker.bindPopup(buildPointPopupContent(point));
                 marker.on("click", (event) => handlePointClick(marker, event, point));
+                marker.on("contextmenu", (event) => handlePointContextMenu(event, point));
                 point._mapMarker = marker;
                 marker.addTo(pointLayer);
             });
@@ -1917,6 +2960,7 @@
                     const marker = L.circleMarker(getPointLatLng(point), getPointStyle(point, index, orderedPoints.length));
                     marker.bindPopup(buildPointPopupContent(point));
                     marker.on("click", (event) => handlePointClick(marker, event, point));
+                    marker.on("contextmenu", (event) => handlePointContextMenu(event, point));
                     point._mapMarker = marker;
                     marker.addTo(pointLayer);
                 });
@@ -1933,6 +2977,200 @@
 
             if (currentPoints.length) {
                 centerRoute();
+            }
+        }
+
+        function getManualCategory() {
+            return manualCategorySelect.value.trim();
+        }
+
+        function setManualDrawControlsState() {
+            const hasRequiredSelection = Boolean(manualVehicleSelect.value && getManualCategory());
+            startManualDrawButton.disabled = isSavingManualTrip || (isManualDrawingMode ? false : !hasRequiredSelection);
+            startManualDrawButton.classList.toggle("active", isManualDrawingMode);
+            startManualDrawButton.textContent = isManualDrawingMode ? "Dibujo activo" : "Iniciar dibujo";
+            manualVehicleSelect.disabled = isManualDrawingMode || isSavingManualTrip;
+            manualCategorySelect.disabled = isManualDrawingMode || isSavingManualTrip;
+            saveManualTripButton.disabled = !isManualDrawingMode || isSavingManualTrip || manualDrawPoints.length < 2;
+            undoManualPointButton.disabled = !isManualDrawingMode || isSavingManualTrip || manualDrawPoints.length === 0;
+            cancelManualDrawButton.disabled = !isManualDrawingMode || isSavingManualTrip;
+            manualDrawStatus.classList.toggle("active", isManualDrawingMode);
+        }
+
+        function setManualDrawStatus() {
+            if (isSavingManualTrip) {
+                manualDrawStatus.textContent = "Guardando recorrido manual...";
+                return;
+            }
+
+            if (!isManualDrawingMode) {
+                manualDrawStatus.textContent = "Elegir vehiculo y categoria antes de dibujar.";
+                return;
+            }
+
+            const pointsText = manualDrawPoints.length === 1 ? "1 punto" : `${manualDrawPoints.length} puntos`;
+            manualDrawStatus.textContent = `Haz clic en el mapa para agregar puntos. Dibujados: ${pointsText}. Minimo para guardar: 2.`;
+        }
+
+        function updateManualDrawUi() {
+            setManualDrawStatus();
+            setManualDrawControlsState();
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
+        }
+
+        function clearManualDrawLayer() {
+            manualDrawLayer.clearLayers();
+            manualDrawLine = null;
+        }
+
+        function renderManualDrawDraft() {
+            clearManualDrawLayer();
+            const categoryColor = getCategoryColor(getManualCategory());
+            const latLngs = manualDrawPoints.map((point) => L.latLng(point.latitude, point.longitude));
+
+            if (latLngs.length >= 2) {
+                manualDrawLine = L.polyline(latLngs, {
+                    color: categoryColor,
+                    weight: 6,
+                    opacity: 0.85,
+                    dashArray: "8 6",
+                    pane: routePaneName
+                }).addTo(manualDrawLayer);
+            }
+
+            latLngs.forEach((latLng, index) => {
+                L.circleMarker(latLng, {
+                    radius: index === 0 || index === latLngs.length - 1 ? 8 : 5,
+                    color: index === 0 ? "#16a34a" : (index === latLngs.length - 1 && latLngs.length > 1 ? "#dc2626" : categoryColor),
+                    fillColor: categoryColor,
+                    fillOpacity: 0.75,
+                    opacity: 1,
+                    weight: 3,
+                    pane: pointPaneName
+                })
+                    .bindPopup(`Punto manual ${index + 1}`)
+                    .addTo(manualDrawLayer);
+            });
+
+            updateManualDrawUi();
+        }
+
+        function addManualDrawPoint(latLng) {
+            if (!isManualDrawingMode || isSavingManualTrip) {
+                return;
+            }
+
+            manualDrawPoints.push({
+                latitude: latLng.lat,
+                longitude: latLng.lng
+            });
+            renderManualDrawDraft();
+        }
+
+        function undoManualDrawPoint() {
+            if (!isManualDrawingMode || isSavingManualTrip || !manualDrawPoints.length) {
+                return;
+            }
+
+            manualDrawPoints.pop();
+            renderManualDrawDraft();
+        }
+
+        function enterManualDrawMode() {
+            if (isManualDrawingMode || isSavingManualTrip) {
+                return;
+            }
+
+            if (!manualVehicleSelect.value) {
+                setMessage("Elegir un vehiculo antes de dibujar.", true);
+                manualVehicleSelect.focus();
+                return;
+            }
+
+            if (!getManualCategory()) {
+                setMessage("Elegir una categoria antes de dibujar.", true);
+                manualCategorySelect.focus();
+                return;
+            }
+
+            stopAutoRefresh();
+            stopReplay();
+            cancelSplitMode(false);
+            map.closePopup();
+            isCategoryEditMode = false;
+            categoryEditTripId = null;
+            manualDrawPoints = [];
+            isManualDrawingMode = true;
+            document.getElementById("map").classList.add("manual-draw-active");
+            clearManualDrawLayer();
+            updateManualDrawUi();
+            setMessage("Modo dibujo activo. Haz clic en el mapa para agregar nodos.");
+        }
+
+        function exitManualDrawMode({ keepSelection = true, showMessage = true } = {}) {
+            isManualDrawingMode = false;
+            manualDrawPoints = [];
+            clearManualDrawLayer();
+            document.getElementById("map").classList.remove("manual-draw-active");
+            if (!keepSelection) {
+                manualVehicleSelect.value = "";
+                manualCategorySelect.value = "";
+            }
+            updateManualDrawUi();
+            if (showMessage) {
+                setMessage("Dibujo cancelado.");
+            }
+        }
+
+        async function saveManualTrip() {
+            if (!isManualDrawingMode || isSavingManualTrip) {
+                return;
+            }
+
+            if (manualDrawPoints.length < 2) {
+                setMessage("El recorrido manual necesita al menos 2 puntos.", true);
+                return;
+            }
+
+            const vehicleId = Number(manualVehicleSelect.value);
+            const categoria = getManualCategory();
+            if (!vehicleId || !categoria) {
+                setMessage("Elegir vehiculo y categoria antes de guardar.", true);
+                return;
+            }
+
+            isSavingManualTrip = true;
+            updateManualDrawUi();
+            beginDataLoad();
+
+            try {
+                const result = await createManualTrip({
+                    vehicle_id: vehicleId,
+                    categoria,
+                    points: manualDrawPoints
+                });
+
+                const newTripId = result.trip.id;
+                isManualDrawingMode = false;
+                manualDrawPoints = [];
+                clearManualDrawLayer();
+                document.getElementById("map").classList.remove("manual-draw-active");
+
+                vehicleSelect.value = "";
+                categoryFilterSelect.value = "";
+                filterStartInput.value = "";
+                filterEndInput.value = "";
+                selectedTripId = newTripId;
+                tripIdInput.value = newTripId;
+                currentMode = "all";
+                await loadAllTrips({ fitMap: false, showMessages: false });
+                selectTrip(newTripId, true);
+                setMessage(`Recorrido manual guardado: ${newTripId}.`);
+            } catch (error) {
+                setMessage(`No se pudo guardar el recorrido manual: ${error.message}`, true);
+            } finally {
+                isSavingManualTrip = false;
+                updateManualDrawUi();
             }
         }
 
@@ -1984,7 +3222,7 @@
             }
         }
 
-        async function loadTripPoints({ fitMap = true, showMessages = true } = {}) {
+        async function loadTripPoints({ fitMap = true, showMessages = true, preserveOnError = false } = {}) {
             const tripId = tripIdInput.value.trim();
             if (!tripId) {
                 if (showMessages) {
@@ -2004,8 +3242,8 @@
             const loadVersion = beginDataLoad();
 
             try {
-                const [pointsResponse, trip] = await Promise.all([
-                    fetch(`${apiBaseUrl}/trips/${tripId}/points`),
+                const [points, trip] = await Promise.all([
+                    fetchTripPoints(tripId),
                     fetchTripById(tripId).catch(() => null)
                 ]);
 
@@ -2013,14 +3251,16 @@
                     return;
                 }
 
-                if (!pointsResponse.ok) {
-                    throw new Error(`Error ${pointsResponse.status}`);
+                if (!showMessages && preserveOnError && !canAutoRefreshNow()) {
+                    return;
                 }
 
                 currentTrip = trip;
                 renderTripSummary(trip);
 
-                const points = await pointsResponse.json();
+                if (!showMessages && preserveOnError && !canAutoRefreshNow()) {
+                    return;
+                }
 
                 if (!points.length) {
                     currentPoints = [];
@@ -2045,6 +3285,10 @@
                     setMessage(`Recorrido cargado: ${points.length} punto(s). Categoría: ${getTripCategory()}.`);
                 }
             } catch (error) {
+                if (!showMessages && preserveOnError) {
+                    return;
+                }
+
                 currentPoints = [];
                 currentTripsWithPoints = [];
                 selectedTripId = null;
@@ -2064,7 +3308,7 @@
             }
         }
 
-        async function loadAllTrips({ fitMap = true, showMessages = true } = {}) {
+        async function loadAllTrips({ fitMap = true, showMessages = true, preserveOnError = false } = {}) {
             currentMode = "all";
 
             if (showMessages) {
@@ -2078,12 +3322,21 @@
 
             try {
                 const range = getFilterRange();
-                const trips = await fetchTrips();
+                const [trips, vehicles] = await Promise.all([
+                    fetchTrips(),
+                    fetchVehicles().catch(() => allVehiclesCache)
+                ]);
                 if (isStaleDataLoad(loadVersion)) {
                     return;
                 }
+                if (!showMessages && preserveOnError && !canAutoRefreshNow()) {
+                    return;
+                }
                 allTripsCache = trips;
+                allVehiclesCache = vehicles;
                 populateVehicleSelect(allTripsCache);
+                populateManualVehicleSelect(allVehiclesCache, allTripsCache);
+                renderLiveVehiclePositions();
                 const orderedTrips = [...trips].sort((a, b) => {
                     const timeA = new Date(getTripStartTime(a)).getTime();
                     const timeB = new Date(getTripStartTime(b)).getTime();
@@ -2099,20 +3352,18 @@
                 });
                 const tripsWithPoints = await Promise.all(
                     filteredTrips.map(async (trip) => {
-                        const response = await fetch(`${apiBaseUrl}/trips/${trip.id}/points`);
-
-                        if (!response.ok) {
-                            throw new Error(`Error ${response.status}`);
-                        }
-
                         return {
                             trip,
-                            points: await response.json()
+                            points: await fetchTripPoints(trip.id)
                         };
                     })
                 );
 
                 if (isStaleDataLoad(loadVersion)) {
+                    return;
+                }
+
+                if (!showMessages && preserveOnError && !canAutoRefreshNow()) {
                     return;
                 }
 
@@ -2125,6 +3376,10 @@
                     setMessage(`Recorridos cargados${filterText}: ${totalTrips}. Puntos: ${totalPoints}.`);
                 }
             } catch (error) {
+                if (!showMessages && preserveOnError) {
+                    return;
+                }
+
                 currentPoints = [];
                 currentTrip = null;
                 currentTrips = [];
@@ -2162,6 +3417,7 @@
                 replayPaused = false;
                 replayTimer = setTimeout(advanceReplay, getNextReplayDelay());
                 setMessage("Replay reanudado.");
+                updateAutoRefreshStatus(getAutoRefreshPauseReason());
                 return;
             }
 
@@ -2203,6 +3459,7 @@
             replayTimer = setTimeout(advanceReplay, getNextReplayDelay());
 
             setMessage(selectedTripId == null ? "Reproduciendo recorrido..." : `Reproduciendo recorrido seleccionado: ${selectedTripId}.`);
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
         }
 
         function getNextReplayDelay() {
@@ -2247,19 +3504,37 @@
 
             replayPaused = true;
             setMessage("Replay pausado.");
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
         }
+        async function runAutoRefreshCycle() {
+            if (!autoRefreshInput.checked || isAutoRefreshLoading || !canAutoRefreshNow()) {
+                return;
+            }
+
+            isAutoRefreshLoading = true;
+            try {
+                if (currentMode === "all") {
+                    await loadAllTrips({ fitMap: false, showMessages: false, preserveOnError: true });
+                } else if (currentTripId || tripIdInput.value.trim()) {
+                    await loadTripPoints({ fitMap: false, showMessages: false, preserveOnError: true });
+                }
+                await loadLiveVehiclePositions();
+                updateAutoRefreshStatus();
+            } finally {
+                isAutoRefreshLoading = false;
+            }
+        }
+
         function startAutoRefresh() {
             if (autoRefreshTimer) {
+                updateAutoRefreshStatus(getAutoRefreshPauseReason());
                 return;
             }
 
             autoRefreshTimer = setInterval(() => {
-                if (currentMode === "all") {
-                    loadAllTrips({ fitMap: false, showMessages: false });
-                } else {
-                    loadTripPoints({ fitMap: false, showMessages: false });
-                }
+                runAutoRefreshCycle();
             }, 5000);
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
         }
 
         function stopAutoRefresh() {
@@ -2267,6 +3542,8 @@
                 clearInterval(autoRefreshTimer);
                 autoRefreshTimer = null;
             }
+            isAutoRefreshLoading = false;
+            updateAutoRefreshStatus();
         }
 
         form.addEventListener("submit", async (event) => {
@@ -2289,6 +3566,7 @@
             categoryEditTripId = null;
             setSplitMode(false);
             tripIdInput.value = "";
+            renderLiveVehiclePositions();
             loadAllTrips();
         });
 
@@ -2302,10 +3580,37 @@
             loadTripInfo();
         });
 
+        startManualDrawButton.addEventListener("click", () => {
+            enterManualDrawMode();
+        });
+
+        saveManualTripButton.addEventListener("click", () => {
+            saveManualTrip();
+        });
+
+        undoManualPointButton.addEventListener("click", () => {
+            undoManualDrawPoint();
+        });
+
+        cancelManualDrawButton.addEventListener("click", () => {
+            exitManualDrawMode();
+        });
+
+        manualVehicleSelect.addEventListener("change", () => {
+            updateManualDrawUi();
+        });
+
+        manualCategorySelect.addEventListener("change", () => {
+            renderManualDrawDraft();
+        });
+
         tripSummary.addEventListener("click", (event) => {
             const action = event.target.dataset.categoryAction;
+            const manualDeleteAction = event.target.dataset.manualDeleteAction;
 
-            if (action === "edit") {
+            if (manualDeleteAction === "delete") {
+                deleteSelectedManualTrip();
+            } else if (action === "edit") {
                 enterCategoryEditMode();
             } else if (action === "cancel") {
                 cancelCategoryEdit();
@@ -2341,6 +3646,30 @@
             setMessage("Replay detenido.");
         });
 
+        pinVehicleButton.addEventListener("click", () => {
+            if (isPinnedVehicleMode) {
+                setPinnedVehicleMode(false);
+                setMessage("Fijacion de vehiculo desactivada.");
+                return;
+            }
+
+            if (!getSelectedVehicleId()) {
+                setLiveTrackingStatus("Elegir un vehiculo para fijar.", true);
+                setMessage("Elegir un vehiculo para fijar.", true);
+                return;
+            }
+
+            const position = getSelectedLiveVehiclePosition();
+            if (!position) {
+                setLiveTrackingStatus("Sin posicion actual disponible para el vehiculo seleccionado.", true);
+                setMessage("Sin posicion actual disponible para fijar.", true);
+                return;
+            }
+
+            setPinnedVehicleMode(true);
+            setMessage(`Vehiculo fijado: ${getVehicleDisplayName(position.vehicle_id, position.vehicle_name)}.`);
+        });
+
         vehicleSelect.addEventListener("change", () => {
             selectedTripId = null;
             isCategoryEditMode = false;
@@ -2348,7 +3677,9 @@
             setSplitMode(false);
             tripIdInput.value = "";
             tripSelect.value = "";
+            renderLiveVehiclePositions();
             loadAllTrips();
+            loadLiveVehiclePositions({ showErrors: true });
         });
 
         categoryFilterSelect.addEventListener("change", () => {
@@ -2369,19 +3700,35 @@
             if (autoRefreshInput.checked) {
                 startAutoRefresh();
                 setMessage("Actualización automática activada.");
-                if (currentMode === "all") {
-                    loadAllTrips({ fitMap: false, showMessages: false });
-                } else if (currentTripId || tripIdInput.value.trim()) {
-                    loadTripPoints({ fitMap: false, showMessages: false });
-                }
+                runAutoRefreshCycle();
             } else {
                 stopAutoRefresh();
                 setMessage("Actualización automática desactivada.");
             }
         });
 
+        map.on("click", (event) => {
+            if (isManualDrawingMode) {
+                addManualDrawPoint(event.latlng);
+            }
+        });
+
+        map.on("popupopen", () => {
+            isMapPopupOpen = true;
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
+        });
+
+        map.on("popupclose", () => {
+            isMapPopupOpen = false;
+            updateAutoRefreshStatus(getAutoRefreshPauseReason());
+        });
+
         renderCategoryLegend();
+        updateManualDrawUi();
+        updateLiveTrackingControls();
+        startLivePositionsRefresh();
         loadAllTrips();
+        loadLiveVehiclePositions({ showErrors: true });
     </script>
 </body>
 </html>

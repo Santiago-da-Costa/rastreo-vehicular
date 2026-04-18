@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 
 from app.database import Base
 
@@ -12,3 +12,4 @@ class Trip(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=True)
     status = Column(String, nullable=False)
+    is_manual = Column(Boolean, nullable=False, default=False, server_default="0")

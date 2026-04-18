@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.trip import Trip
 from app.models.trip_point import TripPoint
+from app.models.vehicle import Vehicle
 from app.schemas.trips import (
     TripCategoryUpdate,
+    TripManualCreate,
+    TripManualResponse,
     TripResponse,
     TripSplitRequest,
     TripSplitResponse,
@@ -16,6 +19,27 @@ from app.schemas.trips import (
 )
 
 router = APIRouter(prefix="/trips", tags=["trips"])
+
+MANUAL_TRIP_POINT_INTERVAL_SECONDS = 5
+
+
+def close_open_vehicle_trips(
+    db: Session,
+    vehicle_id: int,
+    end_time: datetime,
+    exclude_trip_id: int | None = None,
+):
+    query = db.query(Trip).filter(
+        Trip.vehicle_id == vehicle_id,
+        Trip.status == "active",
+        Trip.end_time.is_(None),
+    )
+    if exclude_trip_id is not None:
+        query = query.filter(Trip.id != exclude_trip_id)
+
+    for open_trip in query.all():
+        open_trip.status = "finished"
+        open_trip.end_time = end_time
 
 
 @router.get("", response_model=list[TripResponse])
@@ -64,6 +88,123 @@ def update_trip_category(
     db.commit()
     db.refresh(trip)
     return trip
+
+
+@router.post("/manual", response_model=TripManualResponse, status_code=status.HTTP_201_CREATED)
+def create_manual_trip(
+    trip_data: TripManualCreate,
+    db: Session = Depends(get_db),
+):
+    vehicle = db.query(Vehicle).filter(Vehicle.id == trip_data.vehicle_id).first()
+    if vehicle is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found",
+        )
+
+    categoria = trip_data.categoria.strip()
+    if not categoria:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category cannot be empty",
+        )
+    if len(categoria) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category cannot exceed 50 characters",
+        )
+
+    if len(trip_data.points) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Manual trip must have at least 2 points",
+        )
+
+    for point in trip_data.points:
+        if not -90 <= point.latitude <= 90:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Latitude must be between -90 and 90",
+            )
+        if not -180 <= point.longitude <= 180:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Longitude must be between -180 and 180",
+            )
+
+    base_timestamp = datetime.now()
+    point_timestamps = [
+        base_timestamp + timedelta(seconds=index * MANUAL_TRIP_POINT_INTERVAL_SECONDS)
+        for index in range(len(trip_data.points))
+    ]
+
+    try:
+        trip = Trip(
+            vehicle_id=trip_data.vehicle_id,
+            categoria=categoria,
+            start_time=point_timestamps[0],
+            end_time=point_timestamps[-1],
+            status="finished",
+            is_manual=True,
+        )
+        db.add(trip)
+        db.flush()
+
+        points = [
+            TripPoint(
+                trip_id=trip.id,
+                latitude=point.latitude,
+                longitude=point.longitude,
+                timestamp=point_timestamps[index],
+                accuracy=None,
+                speed=0,
+            )
+            for index, point in enumerate(trip_data.points)
+        ]
+        db.add_all(points)
+        db.commit()
+        db.refresh(trip)
+        for point in points:
+            db.refresh(point)
+    except Exception:
+        db.rollback()
+        raise
+
+    return TripManualResponse(trip=trip, points=points)
+
+
+@router.delete("/{trip_id}/manual", status_code=status.HTTP_200_OK)
+def delete_manual_trip(trip_id: int, db: Session = Depends(get_db)):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if trip is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found",
+        )
+
+    if not trip.is_manual:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only manual trips can be deleted from this action",
+        )
+
+    try:
+        deleted_points = (
+            db.query(TripPoint)
+            .filter(TripPoint.trip_id == trip_id)
+            .delete(synchronize_session=False)
+        )
+        db.delete(trip)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return {
+        "detail": "Manual trip deleted",
+        "trip_id": trip_id,
+        "deleted_points": deleted_points,
+    }
 
 
 @router.post("/{trip_id}/split", response_model=TripSplitResponse)
@@ -119,6 +260,7 @@ def split_trip(
             start_time=split_point.timestamp,
             end_time=last_point.timestamp,
             status=trip.status,
+            is_manual=trip.is_manual,
         )
         db.add(new_trip)
         db.flush()
@@ -157,11 +299,22 @@ def split_trip(
 
 @router.post("/start", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
 def start_trip(trip_data: TripStart, db: Session = Depends(get_db)):
+    vehicle = db.query(Vehicle).filter(Vehicle.id == trip_data.vehicle_id).first()
+    if vehicle is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found",
+        )
+
+    start_time = datetime.now()
+    close_open_vehicle_trips(db, trip_data.vehicle_id, start_time)
+
     trip = Trip(
         vehicle_id=trip_data.vehicle_id,
         categoria=trip_data.categoria,
-        start_time=datetime.now(),
+        start_time=start_time,
         status="active",
+        is_manual=False,
     )
     db.add(trip)
     db.commit()
@@ -178,7 +331,10 @@ def stop_trip(trip_id: int, db: Session = Depends(get_db)):
             detail="Trip not found",
         )
 
-    trip.end_time = datetime.now()
+    stop_time = datetime.now()
+    close_open_vehicle_trips(db, trip.vehicle_id, stop_time, exclude_trip_id=trip.id)
+
+    trip.end_time = stop_time
     trip.status = "finished"
     db.commit()
     db.refresh(trip)
