@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
+from app.config import CORS_ORIGINS
 from app.database import Base, SessionLocal, engine
 from app.models import trip, trip_point, user, vehicle
 from app.routes import auth, trip_points, trips, users, vehicles
@@ -79,7 +80,7 @@ app = FastAPI(title="Sistema de Rastreo Vehicular")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # mantener abierto por ahora
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

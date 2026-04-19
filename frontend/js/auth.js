@@ -1,7 +1,7 @@
 (function () {
     const tokenKey = "rastreo_vehicular_token";
     const userKey = "rastreo_vehicular_user";
-    const apiBaseUrl = window.location.origin;
+    const apiBaseUrl = window.RastreoConfig?.apiBaseUrl || window.location.origin;
 
     function getToken() {
         return window.localStorage.getItem(tokenKey);

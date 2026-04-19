@@ -9,12 +9,51 @@ ENV_PATH = BASE_DIR / ".env"
 
 load_dotenv(dotenv_path=ENV_PATH)
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "sqlite:///./rastreo.db",
+ENVIRONMENT = os.getenv("ENVIRONMENT", "local").lower()
+IS_PRODUCTION = ENVIRONMENT in {"prod", "production"}
+
+
+def _parse_csv(value):
+    if not value:
+        return []
+    return [item.strip().rstrip("/") for item in value.split(",") if item.strip()]
+
+
+def _normalize_database_url(database_url):
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+psycopg://", 1)
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return database_url
+
+
+DATABASE_URL = _normalize_database_url(
+    os.getenv(
+        "DATABASE_URL",
+        "sqlite:///./rastreo.db",
+    )
 )
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or secrets.token_urlsafe(32)
+API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "").rstrip("/")
+FRONTEND_PUBLIC_URL = os.getenv("FRONTEND_PUBLIC_URL", "").rstrip("/")
+
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+]
+CORS_ORIGINS = _parse_csv(os.getenv("CORS_ORIGINS"))
+if FRONTEND_PUBLIC_URL:
+    CORS_ORIGINS.append(FRONTEND_PUBLIC_URL)
+if not CORS_ORIGINS:
+    CORS_ORIGINS = DEFAULT_CORS_ORIGINS
+
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not JWT_SECRET_KEY:
+    if IS_PRODUCTION:
+        raise RuntimeError("JWT_SECRET_KEY debe configurarse en produccion.")
+    JWT_SECRET_KEY = secrets.token_urlsafe(32)
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 

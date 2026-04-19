@@ -629,10 +629,11 @@
         crossorigin=""
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
     <script>
         console.log("TRIP_MAP_SERVIDO_OK");
-        const apiBaseUrl = window.location.origin;
+        const apiBaseUrl = window.RastreoConfig?.apiBaseUrl || window.location.origin;
         const auth = window.RastreoAuth;
         const form = document.getElementById("trip-form");
         const vehicleSelect = document.getElementById("vehicle-select");

@@ -219,9 +219,10 @@
         </section>
     </main>
 
+    <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
     <script>
-        const apiBaseUrl = window.location.origin;
+        const apiBaseUrl = window.RastreoConfig?.apiBaseUrl || window.location.origin;
         const auth = window.RastreoAuth;
 
         const trackingForm = document.getElementById("tracking-form");
