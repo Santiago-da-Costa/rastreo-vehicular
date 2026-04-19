@@ -3,21 +3,34 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies.auth import get_current_active_user
 from app.models.trip import Trip
 from app.models.trip_point import TripPoint
+from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.schemas.vehicles import LiveVehiclePositionResponse, VehicleCreate, VehicleResponse
+from app.utils.permissions import (
+    filter_trip_query_for_user,
+    filter_vehicle_query_for_user,
+    require_permission,
+)
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
 @router.get("", response_model=list[VehicleResponse])
-def list_vehicles(db: Session = Depends(get_db)):
-    return db.query(Vehicle).all()
+def list_vehicles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return filter_vehicle_query_for_user(db.query(Vehicle), db, current_user).all()
 
 
 @router.get("/live", response_model=list[LiveVehiclePositionResponse])
-def list_live_vehicle_positions(db: Session = Depends(get_db)):
+def list_live_vehicle_positions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     latest_trip_per_vehicle = (
         db.query(
             Trip.id.label("trip_id"),
@@ -31,7 +44,7 @@ def list_live_vehicle_positions(db: Session = Depends(get_db)):
         .subquery()
     )
 
-    current_trips = (
+    current_trips_query = (
         db.query(Trip, Vehicle)
         .join(Vehicle, Vehicle.id == Trip.vehicle_id)
         .join(
@@ -40,6 +53,9 @@ def list_live_vehicle_positions(db: Session = Depends(get_db)):
         )
         .filter(latest_trip_per_vehicle.c.trip_rank == 1)
         .filter(Trip.status == "active", Trip.end_time.is_(None))
+    )
+    current_trips = (
+        filter_trip_query_for_user(current_trips_query, db, current_user)
         .all()
     )
     live_positions = []
@@ -70,7 +86,12 @@ def list_live_vehicle_positions(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=VehicleResponse, status_code=status.HTTP_201_CREATED)
-def create_vehicle(vehicle_data: VehicleCreate, db: Session = Depends(get_db)):
+def create_vehicle(
+    vehicle_data: VehicleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    require_permission(current_user, "manage_vehicles")
     vehicle = Vehicle(**vehicle_data.model_dump())
     db.add(vehicle)
     db.commit()

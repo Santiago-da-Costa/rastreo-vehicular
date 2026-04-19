@@ -28,6 +28,27 @@
             line-height: 1.2;
         }
 
+        .session-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 0 0 18px;
+            color: #3c4856;
+            font-size: 14px;
+        }
+
+        .session-user {
+            font-weight: bold;
+        }
+
+        #logout-button {
+            width: auto;
+            padding: 8px 12px;
+            font-size: 14px;
+            background: #3c4856;
+        }
+
         .field {
             display: grid;
             gap: 8px;
@@ -140,6 +161,10 @@
 <body>
     <main>
         <h1>Seguimiento en vivo</h1>
+        <div class="session-bar" aria-live="polite">
+            <span>Sesion: <span class="session-user" id="session-user">Cargando...</span></span>
+            <button id="logout-button" type="button">Salir</button>
+        </div>
 
         <form id="tracking-form">
             <div class="field">
@@ -194,8 +219,10 @@
         </section>
     </main>
 
+    <script src="js/auth.js"></script>
     <script>
         const apiBaseUrl = window.location.origin;
+        const auth = window.RastreoAuth;
 
         const trackingForm = document.getElementById("tracking-form");
         const vehicleIdInput = document.getElementById("vehicle-id");
@@ -209,6 +236,8 @@
         const lastLongitude = document.getElementById("last-longitude");
         const lastAccuracy = document.getElementById("last-accuracy");
         const lastSpeed = document.getElementById("last-speed");
+        const sessionUser = document.getElementById("session-user");
+        const logoutButton = document.getElementById("logout-button");
 
         const maxAllowedAccuracyMeters = 20;
         const minSecondsBetweenPoints = 5;
@@ -224,6 +253,20 @@
         let isTracking = false;
         let lastSentPoint = null;
         let lastSentAt = null;
+        let currentUser = null;
+
+        function userHasPermission(permissionName) {
+            return Boolean(currentUser && currentUser.permissions && currentUser.permissions[permissionName]);
+        }
+
+        function applyUserContext(user) {
+            currentUser = user;
+            sessionUser.textContent = `${user.full_name || user.username} (${user.role})`;
+
+            if (!userHasPermission("view_all_vehicles") && Array.isArray(user.vehicle_ids) && user.vehicle_ids.length === 1) {
+                vehicleIdInput.value = user.vehicle_ids[0];
+            }
+        }
 
         function setMessage(text, type = "normal") {
             statusMessage.textContent = text;
@@ -240,10 +283,11 @@
         }
 
         function updateControls() {
-            startButton.disabled = isTracking;
-            stopButton.disabled = !isTracking && !tripId;
-            vehicleIdInput.disabled = isTracking;
-            categorySelect.disabled = isTracking;
+            const canEditTrips = userHasPermission("edit_trips");
+            startButton.disabled = !canEditTrips || isTracking;
+            stopButton.disabled = !canEditTrips || (!isTracking && !tripId);
+            vehicleIdInput.disabled = !canEditTrips || isTracking;
+            categorySelect.disabled = !canEditTrips || isTracking;
             trackingStatus.textContent = isTracking ? "Siguiendo" : "Detenido";
             currentTripId.textContent = formatValue(tripId);
         }
@@ -255,7 +299,7 @@
         }
 
         async function postJson(url, body) {
-            const response = await fetch(url, {
+            const response = await auth.authFetch(url, {
                 method: "POST",
                 headers: getJsonHeaders(),
                 body: JSON.stringify(body)
@@ -393,6 +437,11 @@
         }
 
         async function startTracking() {
+            if (!userHasPermission("edit_trips")) {
+                setMessage("No tienes permiso para iniciar seguimiento.", "error");
+                return;
+            }
+
             const vehicleId = vehicleIdInput.value.trim();
             const categoria = categorySelect.value;
 
@@ -445,6 +494,11 @@
         }
 
         async function stopTracking() {
+            if (!userHasPermission("edit_trips")) {
+                setMessage("No tienes permiso para detener seguimiento.", "error");
+                return;
+            }
+
             const tripIdToStop = tripId;
 
             if (watchId !== null) {
@@ -486,7 +540,24 @@
             stopTracking();
         });
 
-        updateControls();
+        logoutButton.addEventListener("click", () => {
+            auth.logout();
+        });
+
+        async function bootstrapTracking() {
+            const user = await auth.requireAuth();
+            if (!user) {
+                return;
+            }
+
+            applyUserContext(user);
+            updateControls();
+            if (!userHasPermission("edit_trips")) {
+                setMessage("Tu usuario puede consultar recorridos, pero no iniciar seguimiento.", "error");
+            }
+        }
+
+        bootstrapTracking();
     </script>
 </body>
 </html>

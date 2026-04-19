@@ -5,9 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
-from app.database import Base, engine
-from app.models import trip, trip_point, vehicle
-from app.routes import trip_points, trips, vehicles
+from app.database import Base, SessionLocal, engine
+from app.models import trip, trip_point, user, vehicle
+from app.routes import auth, trip_points, trips, users, vehicles
+from app.services.bootstrap import ensure_initial_admin
 
 Base.metadata.create_all(bind=engine)
 
@@ -61,6 +62,17 @@ def ensure_trip_vehicle_integrity():
 
 ensure_trip_vehicle_integrity()
 
+
+def bootstrap_initial_admin():
+    db = SessionLocal()
+    try:
+        ensure_initial_admin(db)
+    finally:
+        db.close()
+
+
+bootstrap_initial_admin()
+
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app = FastAPI(title="Sistema de Rastreo Vehicular")
@@ -76,6 +88,8 @@ app.add_middleware(
 app.include_router(trip_points.router)
 app.include_router(trips.router)
 app.include_router(vehicles.router)
+app.include_router(auth.router)
+app.include_router(users.router)
 
 
 @app.get("/")

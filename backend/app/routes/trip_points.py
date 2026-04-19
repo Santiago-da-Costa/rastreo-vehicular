@@ -2,9 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.trip import Trip
+from app.dependencies.auth import get_current_active_user
 from app.models.trip_point import TripPoint
+from app.models.user import User
 from app.schemas.trip_points import TripPointCreate, TripPointResponse
+from app.utils.permissions import (
+    get_accessible_trip_or_404,
+    require_edit_trips,
+    user_can_access_trip,
+)
 
 router = APIRouter(prefix="/trips/{trip_id}/points", tags=["trip_points"])
 
@@ -14,13 +20,10 @@ def create_trip_point(
     trip_id: int,
     point_data: TripPointCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if trip is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
+    require_edit_trips(current_user)
+    get_accessible_trip_or_404(db, current_user, trip_id)
 
     point = TripPoint(trip_id=trip_id, **point_data.model_dump())
     db.add(point)
@@ -30,7 +33,17 @@ def create_trip_point(
 
 
 @router.get("", response_model=list[TripPointResponse])
-def list_trip_points(trip_id: int, db: Session = Depends(get_db)):
+def list_trip_points(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if not user_can_access_trip(db, current_user, trip_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found",
+        )
+
     return (
         db.query(TripPoint)
         .filter(TripPoint.trip_id == trip_id)

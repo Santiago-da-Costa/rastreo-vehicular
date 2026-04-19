@@ -67,3 +67,17 @@ button {
     cursor: pointer;
     padding: 10px 16px;
 }
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.message {
+    min-height: 20px;
+    color: #3c4856;
+}
+
+.message.error {
+    color: #b42318;
+}

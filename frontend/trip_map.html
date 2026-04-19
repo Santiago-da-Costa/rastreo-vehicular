@@ -217,6 +217,30 @@
             font-size: 11px;
         }
 
+        .session-bar {
+            display: grid;
+            gap: 6px;
+            margin-top: 10px;
+            color: #3c4856;
+            font-size: 11px;
+        }
+
+        .session-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .session-user {
+            font-weight: bold;
+        }
+
+        .session-button {
+            padding: 5px 8px;
+            font-size: 11px;
+        }
+
         .map-content {
             flex: 1;
             min-width: 0;
@@ -453,6 +477,14 @@
             <div class="trips-panel-header">
                 <h2 class="trips-panel-title">Recorridos</h2>
                 <p class="trips-panel-help">Filtra, selecciona y reproduce recorridos.</p>
+                <div class="session-bar" aria-live="polite">
+                    <div class="session-actions">
+                        <span>Sesion:</span>
+                        <span class="session-user" id="session-user">Cargando...</span>
+                        <button class="session-button secondary-button" id="logout-button" type="button">Salir</button>
+                    </div>
+                    <span id="session-scope"></span>
+                </div>
             </div>
             <div class="sidebar-form">
                 <form class="trip-filter-form" id="trip-form">
@@ -510,7 +542,7 @@
                     <p class="live-tracking-status" id="live-tracking-status">Sin posicion actual disponible.</p>
                 </section>
 
-                <section class="control-group" aria-labelledby="manual-draw-title">
+                <section class="control-group" id="manual-draw-section" aria-labelledby="manual-draw-title">
                     <h3 class="control-group-title" id="manual-draw-title">Dibujar recorrido</h3>
                     <div class="field">
                         <label for="manual-vehicle-select">Vehiculo</label>
@@ -557,7 +589,7 @@
                     <button id="center-route-button" type="button">Centrar recorrido</button>
                 </section>
 
-                <section class="control-group" aria-labelledby="split-trip-title">
+                <section class="control-group" id="split-trip-section" aria-labelledby="split-trip-title">
                     <h3 class="control-group-title" id="split-trip-title">Dividir recorrido</h3>
                     <button id="split-trip-button" class="secondary-button split-mode-button" type="button">Dividir recorrido</button>
                 </section>
@@ -597,9 +629,11 @@
         crossorigin=""
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script src="js/auth.js"></script>
     <script>
         console.log("TRIP_MAP_SERVIDO_OK");
         const apiBaseUrl = window.location.origin;
+        const auth = window.RastreoAuth;
         const form = document.getElementById("trip-form");
         const vehicleSelect = document.getElementById("vehicle-select");
         const categoryFilterSelect = document.getElementById("category-filter-select");
@@ -634,6 +668,11 @@
         const categoryLegend = document.getElementById("category-legend");
         const speedDistanceCanvas = document.getElementById("speed-distance-chart");
         const speedChartEmpty = document.getElementById("speed-chart-empty");
+        const sessionUser = document.getElementById("session-user");
+        const sessionScope = document.getElementById("session-scope");
+        const logoutButton = document.getElementById("logout-button");
+        const manualDrawSection = document.getElementById("manual-draw-section");
+        const splitTripSection = document.getElementById("split-trip-section");
 
         const map = L.map("map").setView([-34.9011, -56.1645], 12);
         setTimeout(() => {
@@ -702,6 +741,7 @@
         let pendingCategoryValue = null;
         let pendingCategoryTripId = null;
         let dataLoadVersion = 0;
+        let currentUser = null;
         const tripCategoryOptions = ["Trabajo", "Ocio", "Personal", "Otro"];
         const unknownTripCategory = "Sin dato";
         const tripCategoryPalette = {
@@ -752,6 +792,28 @@
         function setMessage(text, isError = false) {
             message.textContent = text;
             message.classList.toggle("error", isError);
+        }
+
+        function userHasPermission(permissionName) {
+            return Boolean(currentUser && currentUser.permissions && currentUser.permissions[permissionName]);
+        }
+
+        function applyUserContext(user) {
+            currentUser = user;
+            const displayName = user.full_name || user.username;
+            sessionUser.textContent = `${displayName} (${user.role})`;
+
+            if (userHasPermission("view_all_vehicles")) {
+                sessionScope.textContent = "Acceso a todos los vehiculos.";
+            } else {
+                const vehicleCount = Array.isArray(user.vehicle_ids) ? user.vehicle_ids.length : 0;
+                sessionScope.textContent = `Vehiculos asignados: ${vehicleCount || "ninguno"}.`;
+            }
+
+            const canEditTrips = userHasPermission("edit_trips");
+            manualDrawSection.classList.toggle("hidden-control", !canEditTrips);
+            splitTripSection.classList.toggle("hidden-control", !canEditTrips);
+            splitTripButton.disabled = !canEditTrips;
         }
 
         function beginDataLoad() {
@@ -1499,7 +1561,7 @@
         }
 
         async function fetchLiveVehiclePositions() {
-            const response = await fetch(`${apiBaseUrl}/vehicles/live`);
+            const response = await auth.authFetch(`${apiBaseUrl}/vehicles/live`);
 
             if (!response.ok) {
                 throw new Error(`Error ${response.status}`);
@@ -1887,7 +1949,7 @@
             return [
                 '<span class="trip-category-actions">',
                 `<span>${escapeHtml(formatValue(currentCategory))}</span>`,
-                '<button class="trip-summary-button secondary-button" type="button" data-category-action="edit">Editar</button>',
+                userHasPermission("edit_trips") ? '<button class="trip-summary-button secondary-button" type="button" data-category-action="edit">Editar</button>' : "",
                 '</span>'
             ].join("");
         }
@@ -1943,6 +2005,7 @@
             const summaryStartTime = getTripStartTime(summaryTrip) || (summaryOrderedPoints[0] ? summaryOrderedPoints[0].timestamp : null);
             const summaryEndTime = getTripEndTime(summaryTrip) || (summaryOrderedPoints.length ? summaryOrderedPoints[summaryOrderedPoints.length - 1].timestamp : null);
             const manualDeleteActionHtml = isManualTrip(summaryTrip)
+                && userHasPermission("delete_trips")
                 ? [
                     '<div class="trip-manual-delete-actions">',
                     `<button class="trip-summary-button danger-button" type="button" data-manual-delete-action="delete"${isDeletingManualTrip ? " disabled" : ""}>${isDeletingManualTrip ? "Eliminando..." : "Eliminar recorrido manual"}</button>`,
@@ -2012,6 +2075,11 @@
         }
 
         function enterSplitMode() {
+            if (!userHasPermission("edit_trips")) {
+                setMessage("No tienes permiso para dividir recorridos.", true);
+                return;
+            }
+
             const selectedItem = getSelectedTripItem();
             if (!selectedItem) {
                 setMessage("Selecciona un recorrido antes de dividir.", true);
@@ -2199,7 +2267,7 @@
         }
 
         async function fetchTripById(tripId) {
-            const response = await fetch(`${apiBaseUrl}/trips/${tripId}`);
+            const response = await auth.authFetch(`${apiBaseUrl}/trips/${tripId}`);
 
             if (response.status === 404) {
                 return null;
@@ -2214,7 +2282,7 @@
         }
 
         async function fetchTripPoints(tripId) {
-            const response = await fetch(`${apiBaseUrl}/trips/${tripId}/points`);
+            const response = await auth.authFetch(`${apiBaseUrl}/trips/${tripId}/points`);
 
             if (!response.ok) {
                 throw new Error(`Error ${response.status}`);
@@ -2224,7 +2292,7 @@
         }
 
         async function fetchTrips() {
-            const response = await fetch(`${apiBaseUrl}/trips`);
+            const response = await auth.authFetch(`${apiBaseUrl}/trips`);
 
             if (!response.ok) {
                 throw new Error(`Error ${response.status}`);
@@ -2235,7 +2303,7 @@
         }
 
         async function fetchVehicles() {
-            const response = await fetch(`${apiBaseUrl}/vehicles`);
+            const response = await auth.authFetch(`${apiBaseUrl}/vehicles`);
 
             if (!response.ok) {
                 throw new Error(`Error ${response.status}`);
@@ -2245,7 +2313,11 @@
         }
 
         async function createManualTrip(payload) {
-            const response = await fetch(`${apiBaseUrl}/trips/manual`, {
+            if (!userHasPermission("edit_trips")) {
+                throw new Error("No tienes permiso para crear recorridos.");
+            }
+
+            const response = await auth.authFetch(`${apiBaseUrl}/trips/manual`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -2268,7 +2340,11 @@
         }
 
         async function deleteManualTrip(tripId) {
-            const response = await fetch(`${apiBaseUrl}/trips/${tripId}/manual`, {
+            if (!userHasPermission("delete_trips")) {
+                throw new Error("No tienes permiso para eliminar recorridos.");
+            }
+
+            const response = await auth.authFetch(`${apiBaseUrl}/trips/${tripId}/manual`, {
                 method: "DELETE"
             });
 
@@ -2287,7 +2363,11 @@
         }
 
         async function updateTripCategory(tripId, categoria) {
-            const response = await fetch(`${apiBaseUrl}/trips/${tripId}/category`, {
+            if (!userHasPermission("edit_trips")) {
+                throw new Error("No tienes permiso para editar recorridos.");
+            }
+
+            const response = await auth.authFetch(`${apiBaseUrl}/trips/${tripId}/category`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json"
@@ -2323,7 +2403,11 @@
         }
 
         async function splitTripAtPoint(tripId, pointId) {
-            const response = await fetch(`${apiBaseUrl}/trips/${tripId}/split`, {
+            if (!userHasPermission("edit_trips")) {
+                throw new Error("No tienes permiso para dividir recorridos.");
+            }
+
+            const response = await auth.authFetch(`${apiBaseUrl}/trips/${tripId}/split`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -2375,6 +2459,11 @@
                 return;
             }
 
+            if (!userHasPermission("delete_trips")) {
+                setMessage("No tienes permiso para eliminar recorridos.", true);
+                return;
+            }
+
             const tripId = selectedItem.trip.id;
             if (!isManualTrip(selectedItem.trip)) {
                 setMessage("Solo se pueden eliminar recorridos manuales desde esta accion.", true);
@@ -2418,6 +2507,11 @@
         }
 
         async function executeSplit(point) {
+            if (!userHasPermission("edit_trips")) {
+                setMessage("No tienes permiso para dividir recorridos.", true);
+                return;
+            }
+
             const splitTripItem = splitModeTripId == null
                 ? getSelectedTripItem()
                 : getTripItemById(splitModeTripId);
@@ -2469,6 +2563,11 @@
         }
 
         function enterCategoryEditMode() {
+            if (!userHasPermission("edit_trips")) {
+                setMessage("No tienes permiso para editar recorridos.", true);
+                return;
+            }
+
             const selectedItem = getSelectedTripItem();
             if (!selectedItem) {
                 return;
@@ -2986,14 +3085,15 @@
 
         function setManualDrawControlsState() {
             const hasRequiredSelection = Boolean(manualVehicleSelect.value && getManualCategory());
-            startManualDrawButton.disabled = isSavingManualTrip || (isManualDrawingMode ? false : !hasRequiredSelection);
+            const canEditTrips = userHasPermission("edit_trips");
+            startManualDrawButton.disabled = !canEditTrips || isSavingManualTrip || (isManualDrawingMode ? false : !hasRequiredSelection);
             startManualDrawButton.classList.toggle("active", isManualDrawingMode);
             startManualDrawButton.textContent = isManualDrawingMode ? "Dibujo activo" : "Iniciar dibujo";
-            manualVehicleSelect.disabled = isManualDrawingMode || isSavingManualTrip;
-            manualCategorySelect.disabled = isManualDrawingMode || isSavingManualTrip;
-            saveManualTripButton.disabled = !isManualDrawingMode || isSavingManualTrip || manualDrawPoints.length < 2;
-            undoManualPointButton.disabled = !isManualDrawingMode || isSavingManualTrip || manualDrawPoints.length === 0;
-            cancelManualDrawButton.disabled = !isManualDrawingMode || isSavingManualTrip;
+            manualVehicleSelect.disabled = !canEditTrips || isManualDrawingMode || isSavingManualTrip;
+            manualCategorySelect.disabled = !canEditTrips || isManualDrawingMode || isSavingManualTrip;
+            saveManualTripButton.disabled = !canEditTrips || !isManualDrawingMode || isSavingManualTrip || manualDrawPoints.length < 2;
+            undoManualPointButton.disabled = !canEditTrips || !isManualDrawingMode || isSavingManualTrip || manualDrawPoints.length === 0;
+            cancelManualDrawButton.disabled = !canEditTrips || !isManualDrawingMode || isSavingManualTrip;
             manualDrawStatus.classList.toggle("active", isManualDrawingMode);
         }
 
@@ -3081,6 +3181,11 @@
                 return;
             }
 
+            if (!userHasPermission("edit_trips")) {
+                setMessage("No tienes permiso para dibujar recorridos.", true);
+                return;
+            }
+
             if (!manualVehicleSelect.value) {
                 setMessage("Elegir un vehiculo antes de dibujar.", true);
                 manualVehicleSelect.focus();
@@ -3124,6 +3229,11 @@
 
         async function saveManualTrip() {
             if (!isManualDrawingMode || isSavingManualTrip) {
+                return;
+            }
+
+            if (!userHasPermission("edit_trips")) {
+                setMessage("No tienes permiso para guardar recorridos.", true);
                 return;
             }
 
@@ -3723,12 +3833,26 @@
             updateAutoRefreshStatus(getAutoRefreshPauseReason());
         });
 
-        renderCategoryLegend();
-        updateManualDrawUi();
-        updateLiveTrackingControls();
-        startLivePositionsRefresh();
-        loadAllTrips();
-        loadLiveVehiclePositions({ showErrors: true });
+        logoutButton.addEventListener("click", () => {
+            auth.logout();
+        });
+
+        async function bootstrapAuthenticatedMap() {
+            const user = await auth.requireAuth();
+            if (!user) {
+                return;
+            }
+
+            applyUserContext(user);
+            renderCategoryLegend();
+            updateManualDrawUi();
+            updateLiveTrackingControls();
+            startLivePositionsRefresh();
+            loadAllTrips();
+            loadLiveVehiclePositions({ showErrors: true });
+        }
+
+        bootstrapAuthenticatedMap();
     </script>
 </body>
 </html>

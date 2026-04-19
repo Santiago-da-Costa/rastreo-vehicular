@@ -16,17 +16,65 @@
     </header>
 
     <main>
-        <form>
-            <label for="email">Email</label>
-            <input id="email" name="email" type="email" placeholder="usuario@ejemplo.com">
+        <form id="login-form">
+            <label for="username">Usuario</label>
+            <input id="username" name="username" type="text" autocomplete="username" required>
 
             <label for="password">Password</label>
-            <input id="password" name="password" type="password" placeholder="Password">
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
 
-            <button type="button">Ingresar</button>
+            <button id="login-button" type="submit">Ingresar</button>
+            <p class="message" id="login-message" aria-live="polite"></p>
         </form>
     </main>
 
+    <script src="js/auth.js"></script>
     <script src="js/app.js"></script>
+    <script>
+        const loginForm = document.getElementById("login-form");
+        const usernameInput = document.getElementById("username");
+        const passwordInput = document.getElementById("password");
+        const loginButton = document.getElementById("login-button");
+        const loginMessage = document.getElementById("login-message");
+
+        function setLoginMessage(text, isError = false) {
+            loginMessage.textContent = text;
+            loginMessage.classList.toggle("error", isError);
+        }
+
+        if (window.RastreoAuth.getToken()) {
+            window.RastreoAuth.loadCurrentUser()
+                .then(() => {
+                    window.location.href = window.RastreoAuth.getRedirectAfterLogin();
+                })
+                .catch(() => {
+                    window.RastreoAuth.clearSession();
+                });
+        }
+
+        loginForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!username || !password) {
+                setLoginMessage("Ingresa usuario y password.", true);
+                return;
+            }
+
+            loginButton.disabled = true;
+            setLoginMessage("Ingresando...");
+
+            try {
+                await window.RastreoAuth.login(username, password);
+                window.location.href = window.RastreoAuth.getRedirectAfterLogin();
+            } catch (error) {
+                setLoginMessage("Usuario o password incorrectos.", true);
+            } finally {
+                loginButton.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>

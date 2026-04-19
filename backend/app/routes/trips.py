@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies.auth import get_current_active_user
 from app.models.trip import Trip
 from app.models.trip_point import TripPoint
+from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.schemas.trips import (
     TripCategoryUpdate,
@@ -16,6 +18,13 @@ from app.schemas.trips import (
     TripSplitResponse,
     TripStart,
     TripStopResponse,
+)
+from app.utils.permissions import (
+    filter_trip_query_for_user,
+    get_accessible_trip_or_404,
+    require_delete_trips,
+    require_edit_trips,
+    require_vehicle_access_or_404,
 )
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -43,20 +52,20 @@ def close_open_vehicle_trips(
 
 
 @router.get("", response_model=list[TripResponse])
-def list_trips(db: Session = Depends(get_db)):
-    return db.query(Trip).all()
+def list_trips(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return filter_trip_query_for_user(db.query(Trip), db, current_user).all()
 
 
 @router.get("/{trip_id}", response_model=TripResponse)
-def get_trip(trip_id: int, db: Session = Depends(get_db)):
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if trip is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
-
-    return trip
+def get_trip(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return get_accessible_trip_or_404(db, current_user, trip_id)
 
 
 @router.patch("/{trip_id}/category", response_model=TripResponse)
@@ -64,13 +73,10 @@ def update_trip_category(
     trip_id: int,
     category_data: TripCategoryUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if trip is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
+    require_edit_trips(current_user)
+    trip = get_accessible_trip_or_404(db, current_user, trip_id)
 
     categoria = category_data.categoria.strip()
     if not categoria:
@@ -94,13 +100,16 @@ def update_trip_category(
 def create_manual_trip(
     trip_data: TripManualCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
+    require_edit_trips(current_user)
     vehicle = db.query(Vehicle).filter(Vehicle.id == trip_data.vehicle_id).first()
     if vehicle is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vehicle not found",
         )
+    require_vehicle_access_or_404(db, current_user, trip_data.vehicle_id)
 
     categoria = trip_data.categoria.strip()
     if not categoria:
@@ -174,13 +183,13 @@ def create_manual_trip(
 
 
 @router.delete("/{trip_id}/manual", status_code=status.HTTP_200_OK)
-def delete_manual_trip(trip_id: int, db: Session = Depends(get_db)):
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if trip is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
+def delete_manual_trip(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    require_delete_trips(current_user)
+    trip = get_accessible_trip_or_404(db, current_user, trip_id)
 
     if not trip.is_manual:
         raise HTTPException(
@@ -212,13 +221,10 @@ def split_trip(
     trip_id: int,
     split_data: TripSplitRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if trip is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
+    require_edit_trips(current_user)
+    trip = get_accessible_trip_or_404(db, current_user, trip_id)
 
     points = (
         db.query(TripPoint)
@@ -298,13 +304,19 @@ def split_trip(
 
 
 @router.post("/start", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
-def start_trip(trip_data: TripStart, db: Session = Depends(get_db)):
+def start_trip(
+    trip_data: TripStart,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    require_edit_trips(current_user)
     vehicle = db.query(Vehicle).filter(Vehicle.id == trip_data.vehicle_id).first()
     if vehicle is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vehicle not found",
         )
+    require_vehicle_access_or_404(db, current_user, trip_data.vehicle_id)
 
     start_time = datetime.now()
     close_open_vehicle_trips(db, trip_data.vehicle_id, start_time)
@@ -323,13 +335,13 @@ def start_trip(trip_data: TripStart, db: Session = Depends(get_db)):
 
 
 @router.post("/{trip_id}/stop", response_model=TripStopResponse)
-def stop_trip(trip_id: int, db: Session = Depends(get_db)):
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if trip is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
+def stop_trip(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    require_edit_trips(current_user)
+    trip = get_accessible_trip_or_404(db, current_user, trip_id)
 
     stop_time = datetime.now()
     close_open_vehicle_trips(db, trip.vehicle_id, stop_time, exclude_trip_id=trip.id)
