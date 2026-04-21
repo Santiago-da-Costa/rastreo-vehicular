@@ -26,7 +26,6 @@ cd C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\frontend
 
 Nueva forma de levantar la terminal:
 
-
  uvicorn app.main:app --reload
 
 
@@ -59,6 +58,52 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 
 -- en .env están las contraseñas básicas.
+
+
+-----> Cuenta de GitHub.
+ 
+Correo: sdc.personal01@gmail.com
+contraseña: T10092W1ab-
+username: Santiago-da-Costa
+
+Creé un "repository" llamado "	rastreo-vehicular"
+
+Pegué en terminal en la raíz del proyecto:
+
+git remote add origin https://github.com/Santiago-da-Costa/rastreo-vehicular.git
+git push -u origin main
+
+
+2. Anotar las URLs correctas de hoy
+
+Para usar el sistema desde tu PC
+http://localhost:5500/login.html
+
+Para revisar backend/API
+https://rastreo-vehicular.onrender.com/docs
+
+
+
+Contraseña de Supabase:
+
+Rv2026_supabase_DB_secure
+
+COPIAR la connection string
+
+postgresql://postgres.mwogfqjfhvzhacctoyci:[YOUR-PASSWORD]@aws-1-sa-east-1.pooler.supabase.com:5432/postgres
+
+
+URL generada de database
+
+postgresql://postgres.mwogfqjfhvzhacctoyci:[YOUR-PASSWORD]@aws-1-sa-east-1.pooler.supabase.com:5432/postgres
+
+
+Usuario y contraseña 
+
+
+admin
+
+Admin_2026_RV_secure
 
 
 

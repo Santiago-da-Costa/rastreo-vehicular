@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -6,7 +6,7 @@ from app.database import get_db
 from app.dependencies.auth import get_current_active_user
 from app.models.trip import Trip
 from app.models.trip_point import TripPoint
-from app.models.user import User
+from app.models.user import User, UserVehicleAccess
 from app.models.vehicle import Vehicle
 from app.schemas.vehicles import LiveVehiclePositionResponse, VehicleCreate, VehicleResponse
 from app.utils.permissions import (
@@ -16,6 +16,16 @@ from app.utils.permissions import (
 )
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
+
+
+def get_vehicle_or_404(db: Session, vehicle_id: int) -> Vehicle:
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
+    if vehicle is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found",
+        )
+    return vehicle
 
 
 @router.get("", response_model=list[VehicleResponse])
@@ -97,3 +107,25 @@ def create_vehicle(
     db.commit()
     db.refresh(vehicle)
     return vehicle
+
+
+@router.delete("/{vehicle_id}", response_model=VehicleResponse)
+def delete_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    require_permission(current_user, "manage_vehicles")
+    vehicle = get_vehicle_or_404(db, vehicle_id)
+    trip_count = db.query(Trip).filter(Trip.vehicle_id == vehicle_id).count()
+    if trip_count:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar el vehiculo porque tiene recorridos asociados",
+        )
+
+    deleted_vehicle = VehicleResponse.model_validate(vehicle)
+    db.query(UserVehicleAccess).filter(UserVehicleAccess.vehicle_id == vehicle_id).delete()
+    db.delete(vehicle)
+    db.commit()
+    return deleted_vehicle

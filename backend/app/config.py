@@ -27,12 +27,11 @@ def _normalize_database_url(database_url):
     return database_url
 
 
-DATABASE_URL = _normalize_database_url(
-    os.getenv(
-        "DATABASE_URL",
-        "sqlite:///./rastreo.db",
-    )
-)
+_DATABASE_URL = os.getenv("DATABASE_URL")
+if IS_PRODUCTION and not _DATABASE_URL:
+    raise RuntimeError("DATABASE_URL debe configurarse en produccion.")
+
+DATABASE_URL = _normalize_database_url(_DATABASE_URL or "sqlite:///./rastreo.db")
 
 API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "").rstrip("/")
 FRONTEND_PUBLIC_URL = os.getenv("FRONTEND_PUBLIC_URL", "").rstrip("/")

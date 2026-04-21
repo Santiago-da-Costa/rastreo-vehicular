@@ -98,13 +98,32 @@ def update_user(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
 ):
     user = get_user_or_404(db, user_id)
-    user.is_active = False
+    if user.id == current_admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No puedes eliminar tu propio usuario mientras esta sesion esta activa",
+        )
+
+    if user.role == "admin":
+        active_admin_count = (
+            db.query(User)
+            .filter(User.role == "admin", User.is_active.is_(True))
+            .count()
+        )
+        if active_admin_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se puede eliminar el ultimo admin",
+            )
+
+    deleted_user = UserResponse.model_validate(user)
+    db.query(UserVehicleAccess).filter(UserVehicleAccess.user_id == user_id).delete()
+    db.delete(user)
     db.commit()
-    db.refresh(user)
-    return user
+    return deleted_user
 
 
 @router.get("/{user_id}/vehicles", response_model=UserVehicleAssignment)

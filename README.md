@@ -36,15 +36,19 @@ Archivos de referencia:
 
 - `backend/.env.example`: configuracion local de ejemplo.
 - `backend/.env.production.example`: variables esperadas para Render, Railway o un servicio similar.
+- `docs/despliegue_supabase_render.md`: guia breve para conectar Supabase/PostgreSQL desde Render.
 
 Variables principales:
 
 - `ENVIRONMENT`: usar `local` en desarrollo y `production` en despliegue.
-- `DATABASE_URL`: por defecto `sqlite:///./rastreo.db`. En produccion puede ser una URL PostgreSQL.
-- `JWT_SECRET_KEY`: en local puede estar en `.env`; en produccion es obligatorio configurarlo como secreto.
+- `DATABASE_URL`: por defecto `sqlite:///./rastreo.db`. En produccion debe apuntar a PostgreSQL.
+- `JWT_SECRET_KEY`: en local puede estar en `.env`; en produccion es obligatorio configurarlo como secreto. El backend no lee `SECRET_KEY`.
+- `ACCESS_TOKEN_EXPIRE_MINUTES`: duracion del token JWT en minutos. Valor simple recomendado: `60`.
 - `API_PUBLIC_URL`: URL publica del backend desplegado.
 - `FRONTEND_PUBLIC_URL`: URL publica del frontend si se sirve separado.
 - `CORS_ORIGINS`: origenes permitidos separados por coma, por ejemplo `https://mi-frontend.com,https://otro-dominio.com`.
+- `CREATE_INITIAL_ADMIN`: usar `true` solo si se quiere crear un admin inicial durante el arranque.
+- `INITIAL_ADMIN_USERNAME` e `INITIAL_ADMIN_PASSWORD`: obligatorias cuando `CREATE_INITIAL_ADMIN=true`.
 
 ## Base de datos
 
@@ -54,13 +58,15 @@ Localmente sigue funcionando SQLite con:
 DATABASE_URL=sqlite:///./rastreo.db
 ```
 
-Para produccion, el codigo acepta URLs PostgreSQL como las que suelen entregar Render o Railway:
+Para produccion, el codigo acepta URLs PostgreSQL como las que suelen entregar Supabase, Render o Railway:
 
 ```env
 DATABASE_URL=postgres://user:password@host:5432/database
 ```
 
-El codigo normaliza esa URL para usar el driver `psycopg`. No hay migracion obligatoria en esta fase.
+El codigo normaliza `postgres://` y `postgresql://` para usar el driver `psycopg`. No hay migracion obligatoria en esta fase.
+
+Para Supabase en Render, ver `docs/despliegue_supabase_render.md`.
 
 ## CORS y URL del frontend
 

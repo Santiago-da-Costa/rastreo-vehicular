@@ -60,6 +60,22 @@ def ensure_trip_vehicle_integrity():
                 },
             )
 
+        if missing_vehicle_ids and engine.dialect.name == "postgresql":
+            connection.execute(
+                text(
+                    """
+                    SELECT setval(sequence_name::regclass, max_id, true)
+                    FROM (
+                        SELECT
+                            pg_get_serial_sequence('vehicles', 'id') AS sequence_name,
+                            MAX(id)::bigint AS max_id
+                        FROM vehicles
+                    ) AS vehicle_sequence
+                    WHERE sequence_name IS NOT NULL AND max_id IS NOT NULL
+                    """
+                )
+            )
+
 
 ensure_trip_vehicle_integrity()
 

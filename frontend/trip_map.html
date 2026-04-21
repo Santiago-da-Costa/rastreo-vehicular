@@ -308,6 +308,106 @@
             padding-bottom: 0;
         }
 
+        .admin-panel {
+            display: grid;
+            gap: 10px;
+        }
+
+        .admin-form {
+            display: grid;
+            gap: 8px;
+        }
+
+        .admin-form select[multiple] {
+            min-height: 96px;
+        }
+
+        .checkbox-list {
+            display: grid;
+            gap: 6px;
+            max-height: 156px;
+            overflow-y: auto;
+            padding: 8px;
+            border: 1px solid #d7dde3;
+            border-radius: 6px;
+            background: #f8fafc;
+        }
+
+        .checkbox-list:empty::before {
+            content: "No hay vehiculos disponibles.";
+            color: #64748b;
+            font-size: 0.78rem;
+        }
+
+        .checkbox-list label {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            color: #1f2933;
+            font-size: 0.82rem;
+            line-height: 1.35;
+        }
+
+        .checkbox-list input[type="checkbox"] {
+            width: auto;
+            margin: 2px 0 0;
+        }
+
+        .field-help {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.74rem;
+            line-height: 1.35;
+        }
+
+        .admin-message {
+            min-height: 18px;
+            color: #3c4856;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .admin-message.error {
+            color: #b42318;
+        }
+
+        .access-list {
+            display: grid;
+            gap: 6px;
+            color: #3c4856;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .access-list-item {
+            padding: 7px;
+            border: 1px solid #d7dde3;
+            border-radius: 6px;
+            background: #f8fafc;
+        }
+
+        .access-list-item strong {
+            display: block;
+            color: #1f2933;
+            margin-bottom: 3px;
+        }
+
+        .access-list-item-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .small-button {
+            width: auto;
+            padding: 6px 9px;
+            font-size: 0.74rem;
+        }
+
+        .danger-button {
+            background: #b42318;
+        }
+
         .control-group-title {
             margin: 0;
             font-size: 10px;
@@ -542,6 +642,86 @@
                     <p class="live-tracking-status" id="live-tracking-status">Sin posicion actual disponible.</p>
                 </section>
 
+                <section class="control-group hidden-control" id="admin-management-section" aria-labelledby="admin-management-title">
+                    <h3 class="control-group-title" id="admin-management-title">Administracion</h3>
+                    <div class="admin-panel">
+                        <form class="admin-form" id="create-user-form">
+                            <div class="field">
+                                <label for="new-user-username">Usuario</label>
+                                <input id="new-user-username" name="username" autocomplete="off" required>
+                            </div>
+                            <div class="field">
+                                <label for="new-user-full-name">Nombre</label>
+                                <input id="new-user-full-name" name="full_name" autocomplete="off" required>
+                            </div>
+                            <div class="field">
+                                <label for="new-user-email">Email</label>
+                                <input id="new-user-email" name="email" type="email" autocomplete="off">
+                            </div>
+                            <div class="field">
+                                <label for="new-user-password">Password</label>
+                                <input id="new-user-password" name="password" type="password" autocomplete="new-password" required>
+                            </div>
+                            <div class="field">
+                                <label for="new-user-role">Rol</label>
+                                <select id="new-user-role" name="role">
+                                    <option value="user">user</option>
+                                    <option value="admin">admin</option>
+                                </select>
+                            </div>
+                            <button id="create-user-button" type="submit">Crear usuario</button>
+                        </form>
+
+                        <form class="admin-form" id="create-vehicle-form">
+                            <div class="field">
+                                <label for="new-vehicle-name">Vehiculo</label>
+                                <input id="new-vehicle-name" name="nombre" autocomplete="off" required>
+                            </div>
+                            <div class="field">
+                                <label for="new-vehicle-plate">Matricula</label>
+                                <input id="new-vehicle-plate" name="matricula" autocomplete="off" required>
+                            </div>
+                            <div class="field">
+                                <label for="new-vehicle-description">Descripcion</label>
+                                <input id="new-vehicle-description" name="descripcion" autocomplete="off">
+                            </div>
+                            <button id="create-vehicle-button" type="submit">Crear vehiculo</button>
+                        </form>
+
+                        <form class="admin-form" id="vehicle-access-form">
+                            <div class="field">
+                                <label for="access-user-select">Usuario</label>
+                                <select id="access-user-select"></select>
+                            </div>
+                            <div class="field">
+                                <label>Vehiculos asignados</label>
+                                <p class="field-help">Marca uno o varios vehiculos y luego guarda los accesos.</p>
+                                <div class="checkbox-list" id="access-vehicle-checkboxes" aria-live="polite"></div>
+                            </div>
+                            <button id="save-access-button" type="submit">Guardar accesos</button>
+                        </form>
+
+                        <form class="admin-form" id="delete-user-form">
+                            <div class="field">
+                                <label for="delete-user-select">Eliminar usuario</label>
+                                <select id="delete-user-select"></select>
+                            </div>
+                            <button id="delete-user-button" class="danger-button" type="submit">Eliminar usuario</button>
+                        </form>
+
+                        <form class="admin-form" id="delete-vehicle-form">
+                            <div class="field">
+                                <label for="delete-vehicle-select">Eliminar vehiculo</label>
+                                <select id="delete-vehicle-select"></select>
+                            </div>
+                            <button id="delete-vehicle-button" class="danger-button" type="submit">Eliminar vehiculo</button>
+                        </form>
+
+                        <div class="access-list" id="access-list" aria-live="polite"></div>
+                        <div class="admin-message" id="admin-message" aria-live="polite"></div>
+                    </div>
+                </section>
+
                 <section class="control-group" id="manual-draw-section" aria-labelledby="manual-draw-title">
                     <h3 class="control-group-title" id="manual-draw-title">Dibujar recorrido</h3>
                     <div class="field">
@@ -674,6 +854,23 @@
         const logoutButton = document.getElementById("logout-button");
         const manualDrawSection = document.getElementById("manual-draw-section");
         const splitTripSection = document.getElementById("split-trip-section");
+        const adminManagementSection = document.getElementById("admin-management-section");
+        const createUserForm = document.getElementById("create-user-form");
+        const createVehicleForm = document.getElementById("create-vehicle-form");
+        const vehicleAccessForm = document.getElementById("vehicle-access-form");
+        const deleteUserForm = document.getElementById("delete-user-form");
+        const deleteVehicleForm = document.getElementById("delete-vehicle-form");
+        const accessUserSelect = document.getElementById("access-user-select");
+        const accessVehicleCheckboxes = document.getElementById("access-vehicle-checkboxes");
+        const deleteUserSelect = document.getElementById("delete-user-select");
+        const deleteVehicleSelect = document.getElementById("delete-vehicle-select");
+        const accessList = document.getElementById("access-list");
+        const adminMessage = document.getElementById("admin-message");
+        const createUserButton = document.getElementById("create-user-button");
+        const createVehicleButton = document.getElementById("create-vehicle-button");
+        const saveAccessButton = document.getElementById("save-access-button");
+        const deleteUserButton = document.getElementById("delete-user-button");
+        const deleteVehicleButton = document.getElementById("delete-vehicle-button");
 
         const map = L.map("map").setView([-34.9011, -56.1645], 12);
         setTimeout(() => {
@@ -743,6 +940,8 @@
         let pendingCategoryTripId = null;
         let dataLoadVersion = 0;
         let currentUser = null;
+        let adminUsersCache = [];
+        let adminAssignmentsCache = new Map();
         const tripCategoryOptions = ["Trabajo", "Ocio", "Personal", "Otro"];
         const unknownTripCategory = "Sin dato";
         const tripCategoryPalette = {
@@ -815,6 +1014,10 @@
             manualDrawSection.classList.toggle("hidden-control", !canEditTrips);
             splitTripSection.classList.toggle("hidden-control", !canEditTrips);
             splitTripButton.disabled = !canEditTrips;
+
+            const canManageUsers = userHasPermission("manage_users");
+            const canManageVehicles = userHasPermission("manage_vehicles");
+            adminManagementSection.classList.toggle("hidden-control", !(canManageUsers || canManageVehicles));
         }
 
         function beginDataLoad() {
@@ -2311,6 +2514,269 @@
             }
 
             return response.json();
+        }
+
+        async function parseErrorDetail(response) {
+            let detail = `Error ${response.status}`;
+            try {
+                const body = await response.json();
+                detail = body.detail || detail;
+            } catch (error) {
+                // Keep the HTTP status when the backend does not return JSON.
+            }
+            return detail;
+        }
+
+        function setAdminMessage(text, isError = false) {
+            adminMessage.textContent = text;
+            adminMessage.classList.toggle("error", isError);
+        }
+
+        async function fetchUsers() {
+            const response = await auth.authFetch(`${apiBaseUrl}/users`);
+            if (!response.ok) {
+                throw new Error(await parseErrorDetail(response));
+            }
+            return response.json();
+        }
+
+        async function fetchUserVehicleAssignment(userId) {
+            const response = await auth.authFetch(`${apiBaseUrl}/users/${userId}/vehicles`);
+            if (!response.ok) {
+                throw new Error(await parseErrorDetail(response));
+            }
+            return response.json();
+        }
+
+        async function replaceUserVehicleAssignment(userId, vehicleIds) {
+            const response = await auth.authFetch(`${apiBaseUrl}/users/${userId}/vehicles`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ vehicle_ids: vehicleIds })
+            });
+            if (!response.ok) {
+                throw new Error(await parseErrorDetail(response));
+            }
+            return response.json();
+        }
+
+        async function createUser(payload) {
+            const response = await auth.authFetch(`${apiBaseUrl}/users`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) {
+                throw new Error(await parseErrorDetail(response));
+            }
+            return response.json();
+        }
+
+        async function createVehicle(payload) {
+            const response = await auth.authFetch(`${apiBaseUrl}/vehicles`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) {
+                throw new Error(await parseErrorDetail(response));
+            }
+            return response.json();
+        }
+
+        async function deleteUser(userId) {
+            const response = await auth.authFetch(`${apiBaseUrl}/users/${userId}`, {
+                method: "DELETE"
+            });
+            if (!response.ok) {
+                throw new Error(await parseErrorDetail(response));
+            }
+            return response.json();
+        }
+
+        async function deleteVehicle(vehicleId) {
+            const response = await auth.authFetch(`${apiBaseUrl}/vehicles/${vehicleId}`, {
+                method: "DELETE"
+            });
+            if (!response.ok) {
+                throw new Error(await parseErrorDetail(response));
+            }
+            return response.json();
+        }
+
+        function getSelectedAccessVehicleIds() {
+            return [...accessVehicleCheckboxes.querySelectorAll('input[type="checkbox"]:checked')]
+                .map((input) => Number(input.value))
+                .filter((vehicleId) => Number.isFinite(vehicleId));
+        }
+
+        function renderAccessUserSelect() {
+            const selectedUserId = accessUserSelect.value;
+            accessUserSelect.innerHTML = "";
+
+            adminUsersCache.forEach((user) => {
+                const option = document.createElement("option");
+                option.value = user.id;
+                option.textContent = `${user.full_name || user.username} (${user.username}, ${user.role})`;
+                accessUserSelect.appendChild(option);
+            });
+
+            if (adminUsersCache.some((user) => String(user.id) === String(selectedUserId))) {
+                accessUserSelect.value = selectedUserId;
+            }
+        }
+
+        function renderDeleteUserSelect() {
+            const selectedUserId = deleteUserSelect.value;
+            deleteUserSelect.innerHTML = "";
+
+            const usersToDelete = adminUsersCache.filter((user) => currentUser && user.id !== currentUser.id);
+            if (!usersToDelete.length) {
+                const option = document.createElement("option");
+                option.value = "";
+                option.textContent = "No hay usuarios eliminables";
+                deleteUserSelect.appendChild(option);
+                deleteUserButton.disabled = true;
+                return;
+            }
+
+            usersToDelete.forEach((user) => {
+                const option = document.createElement("option");
+                option.value = user.id;
+                option.textContent = `${user.full_name || user.username} (${user.username}, ${user.role})`;
+                deleteUserSelect.appendChild(option);
+            });
+
+            if (usersToDelete.some((user) => String(user.id) === String(selectedUserId))) {
+                deleteUserSelect.value = selectedUserId;
+            }
+            deleteUserButton.disabled = false;
+        }
+
+        function renderDeleteVehicleSelect() {
+            const selectedVehicleId = deleteVehicleSelect.value;
+            deleteVehicleSelect.innerHTML = "";
+
+            if (!allVehiclesCache.length) {
+                const option = document.createElement("option");
+                option.value = "";
+                option.textContent = "No hay vehiculos eliminables";
+                deleteVehicleSelect.appendChild(option);
+                deleteVehicleButton.disabled = true;
+                return;
+            }
+
+            allVehiclesCache
+                .slice()
+                .sort((a, b) => String(a.id).localeCompare(String(b.id), "es", { numeric: true }))
+                .forEach((vehicle) => {
+                    const option = document.createElement("option");
+                    option.value = vehicle.id;
+                    option.textContent = `Vehiculo ${vehicle.id} - ${vehicle.nombre} (${vehicle.matricula})`;
+                    deleteVehicleSelect.appendChild(option);
+                });
+
+            if (allVehiclesCache.some((vehicle) => String(vehicle.id) === String(selectedVehicleId))) {
+                deleteVehicleSelect.value = selectedVehicleId;
+            }
+            deleteVehicleButton.disabled = false;
+        }
+
+        function renderAccessVehicleSelect() {
+            const selectedUserId = accessUserSelect.value;
+            const assignedVehicleIds = new Set(
+                adminAssignmentsCache.get(String(selectedUserId)) || []
+            );
+
+            accessVehicleCheckboxes.innerHTML = "";
+            allVehiclesCache
+                .slice()
+                .sort((a, b) => String(a.id).localeCompare(String(b.id), "es", { numeric: true }))
+                .forEach((vehicle) => {
+                    const label = document.createElement("label");
+                    const input = document.createElement("input");
+                    const text = document.createElement("span");
+                    input.type = "checkbox";
+                    input.value = vehicle.id;
+                    input.checked = assignedVehicleIds.has(Number(vehicle.id));
+                    text.textContent = `Vehiculo ${vehicle.id} - ${vehicle.nombre} (${vehicle.matricula})`;
+                    label.appendChild(input);
+                    label.appendChild(text);
+                    accessVehicleCheckboxes.appendChild(label);
+                });
+        }
+
+        function renderAccessList() {
+            if (!adminUsersCache.length) {
+                accessList.textContent = "No hay usuarios para mostrar.";
+                return;
+            }
+
+            const vehiclesById = new Map(allVehiclesCache.map((vehicle) => [String(vehicle.id), vehicle]));
+            accessList.innerHTML = adminUsersCache.map((user) => {
+                const assignedIds = adminAssignmentsCache.get(String(user.id)) || [];
+                const assignedNames = assignedIds.map((vehicleId) => {
+                    const vehicle = vehiclesById.get(String(vehicleId));
+                    return vehicle
+                        ? `${vehicle.nombre} (${vehicle.matricula})`
+                        : `Vehiculo ${vehicleId}`;
+                });
+                const accessText = user.role === "admin"
+                    ? "Admin: ve todos los vehiculos."
+                    : (assignedNames.length ? assignedNames.join(", ") : "Sin vehiculos asignados.");
+
+                return [
+                    '<div class="access-list-item">',
+                    `<strong>${escapeHtml(user.full_name || user.username)} (${escapeHtml(user.role)})</strong>`,
+                    `<span>${escapeHtml(accessText)}</span>`,
+                    user.id !== currentUser?.id
+                        ? `<div class="access-list-item-actions"><button class="small-button danger-button" type="button" data-admin-delete-user-id="${user.id}" data-admin-delete-user-name="${escapeHtml(user.full_name || user.username)}">Eliminar usuario</button></div>`
+                        : "",
+                    '</div>'
+                ].join("");
+            }).join("");
+        }
+
+        async function loadAdminManagementData({ showMessage = false } = {}) {
+            if (!userHasPermission("manage_users") && !userHasPermission("manage_vehicles")) {
+                return;
+            }
+
+            if (showMessage) {
+                setAdminMessage("Cargando administracion...");
+            }
+
+            const [users, vehicles] = await Promise.all([
+                fetchUsers(),
+                fetchVehicles()
+            ]);
+            adminUsersCache = users;
+            allVehiclesCache = vehicles;
+
+            const assignmentEntries = await Promise.all(
+                users.map(async (user) => {
+                    const assignment = await fetchUserVehicleAssignment(user.id);
+                    return [String(user.id), assignment.vehicle_ids || []];
+                })
+            );
+            adminAssignmentsCache = new Map(assignmentEntries);
+
+            renderAccessUserSelect();
+            renderDeleteUserSelect();
+            renderDeleteVehicleSelect();
+            renderAccessVehicleSelect();
+            renderAccessList();
+            populateManualVehicleSelect(allVehiclesCache, allTripsCache);
+
+            if (showMessage) {
+                setAdminMessage("Administracion actualizada.");
+            }
         }
 
         async function createManualTrip(payload) {
@@ -3818,6 +4284,202 @@
             }
         });
 
+        createUserForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!userHasPermission("manage_users")) {
+                setAdminMessage("Solo admin puede crear usuarios.", true);
+                return;
+            }
+
+            const formData = new FormData(createUserForm);
+            const payload = {
+                username: String(formData.get("username") || "").trim(),
+                full_name: String(formData.get("full_name") || "").trim(),
+                email: String(formData.get("email") || "").trim() || null,
+                password: String(formData.get("password") || ""),
+                role: String(formData.get("role") || "user"),
+                is_active: true
+            };
+
+            createUserButton.disabled = true;
+            try {
+                await createUser(payload);
+                createUserForm.reset();
+                document.getElementById("new-user-role").value = "user";
+                await loadAdminManagementData();
+                setAdminMessage("Usuario creado.");
+            } catch (error) {
+                setAdminMessage(`No se pudo crear el usuario: ${error.message}`, true);
+            } finally {
+                createUserButton.disabled = false;
+            }
+        });
+
+        createVehicleForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!userHasPermission("manage_vehicles")) {
+                setAdminMessage("Solo admin puede crear vehiculos.", true);
+                return;
+            }
+
+            const formData = new FormData(createVehicleForm);
+            const payload = {
+                nombre: String(formData.get("nombre") || "").trim(),
+                matricula: String(formData.get("matricula") || "").trim(),
+                descripcion: String(formData.get("descripcion") || "").trim() || null
+            };
+
+            createVehicleButton.disabled = true;
+            try {
+                await createVehicle(payload);
+                createVehicleForm.reset();
+                await loadAdminManagementData();
+                await loadAllTrips({ fitMap: false, showMessages: false, preserveOnError: true });
+                setAdminMessage("Vehiculo creado.");
+            } catch (error) {
+                setAdminMessage(`No se pudo crear el vehiculo: ${error.message}`, true);
+            } finally {
+                createVehicleButton.disabled = false;
+            }
+        });
+
+        vehicleAccessForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!userHasPermission("manage_users")) {
+                setAdminMessage("Solo admin puede asignar vehiculos.", true);
+                return;
+            }
+
+            const userId = accessUserSelect.value;
+            if (!userId) {
+                setAdminMessage("Elegir un usuario.", true);
+                return;
+            }
+
+            saveAccessButton.disabled = true;
+            try {
+                const assignment = await replaceUserVehicleAssignment(userId, getSelectedAccessVehicleIds());
+                adminAssignmentsCache.set(String(userId), assignment.vehicle_ids || []);
+                renderAccessVehicleSelect();
+                renderAccessList();
+                setAdminMessage("Accesos guardados.");
+            } catch (error) {
+                setAdminMessage(`No se pudieron guardar los accesos: ${error.message}`, true);
+            } finally {
+                saveAccessButton.disabled = false;
+            }
+        });
+
+        accessUserSelect.addEventListener("change", () => {
+            renderAccessVehicleSelect();
+        });
+
+        deleteUserForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!userHasPermission("manage_users")) {
+                setAdminMessage("Solo admin puede eliminar usuarios.", true);
+                return;
+            }
+
+            const userId = deleteUserSelect.value;
+            if (!userId) {
+                setAdminMessage("Elegir un usuario para eliminar.", true);
+                return;
+            }
+
+            const selectedOption = deleteUserSelect.options[deleteUserSelect.selectedIndex];
+            const confirmed = window.confirm(
+                `Eliminar el usuario ${selectedOption ? selectedOption.textContent : userId}? Esta accion no se puede deshacer.`
+            );
+            if (!confirmed) {
+                setAdminMessage("Eliminacion de usuario cancelada.");
+                return;
+            }
+
+            deleteUserButton.disabled = true;
+            try {
+                await deleteUser(userId);
+                await loadAdminManagementData();
+                setAdminMessage("Usuario eliminado correctamente.");
+            } catch (error) {
+                setAdminMessage(`No se pudo eliminar el usuario: ${error.message}`, true);
+            } finally {
+                deleteUserButton.disabled = false;
+            }
+        });
+
+        deleteVehicleForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!userHasPermission("manage_vehicles")) {
+                setAdminMessage("Solo admin puede eliminar vehiculos.", true);
+                return;
+            }
+
+            const vehicleId = deleteVehicleSelect.value;
+            if (!vehicleId) {
+                setAdminMessage("Elegir un vehiculo para eliminar.", true);
+                return;
+            }
+
+            const selectedOption = deleteVehicleSelect.options[deleteVehicleSelect.selectedIndex];
+            const confirmed = window.confirm(
+                `Eliminar ${selectedOption ? selectedOption.textContent : `el vehiculo ${vehicleId}`}? Esta accion no se puede deshacer.`
+            );
+            if (!confirmed) {
+                setAdminMessage("Eliminacion de vehiculo cancelada.");
+                return;
+            }
+
+            deleteVehicleButton.disabled = true;
+            try {
+                await deleteVehicle(vehicleId);
+                await loadAdminManagementData();
+                await loadAllTrips({ fitMap: false, showMessages: false, preserveOnError: true });
+                setAdminMessage("Vehiculo eliminado correctamente.");
+            } catch (error) {
+                setAdminMessage(`No se pudo eliminar el vehiculo: ${error.message}`, true);
+            } finally {
+                deleteVehicleButton.disabled = false;
+            }
+        });
+
+        accessList.addEventListener("click", async (event) => {
+            const deleteUserId = event.target.dataset.adminDeleteUserId;
+            if (!deleteUserId) {
+                return;
+            }
+
+            if (!userHasPermission("manage_users")) {
+                setAdminMessage("Solo admin puede eliminar usuarios.", true);
+                return;
+            }
+
+            const userName = event.target.dataset.adminDeleteUserName || `usuario ${deleteUserId}`;
+            const confirmed = window.confirm(
+                `Eliminar el usuario ${userName}? Esta accion no se puede deshacer.`
+            );
+            if (!confirmed) {
+                setAdminMessage("Eliminacion de usuario cancelada.");
+                return;
+            }
+
+            deleteUserButton.disabled = true;
+            try {
+                await deleteUser(deleteUserId);
+                await loadAdminManagementData();
+                setAdminMessage("Usuario eliminado correctamente.");
+            } catch (error) {
+                setAdminMessage(`No se pudo eliminar el usuario: ${error.message}`, true);
+            } finally {
+                deleteUserButton.disabled = false;
+            }
+        });
+
         map.on("click", (event) => {
             if (isManualDrawingMode) {
                 addManualDrawPoint(event.latlng);
@@ -3851,6 +4513,9 @@
             startLivePositionsRefresh();
             loadAllTrips();
             loadLiveVehiclePositions({ showErrors: true });
+            loadAdminManagementData().catch((error) => {
+                setAdminMessage(`No se pudo cargar administracion: ${error.message}`, true);
+            });
         }
 
         bootstrapAuthenticatedMap();
