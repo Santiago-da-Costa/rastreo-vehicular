@@ -9,8 +9,21 @@
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     />
     <style>
+        :root {
+            --control-column-width: 320px;
+            --map-chart-divider-size: 12px;
+            --map-min-height: 260px;
+            --chart-min-height: 180px;
+            --chart-panel-height: 250px;
+        }
+
         * {
             box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
         }
 
         body {
@@ -18,6 +31,7 @@
             font-family: Arial, sans-serif;
             background: #eef2f5;
             color: #1f2933;
+            overflow: hidden;
         }
 
         .field {
@@ -185,42 +199,353 @@
             flex: 0 0 auto;
         }
 
-        .map-layout {
-            display: flex;
-            height: 100vh;
-            min-height: 620px;
+        .sidebar-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 890;
+            background: rgba(15, 23, 42, 0.42);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.24s ease;
         }
 
-        .trips-panel {
-            width: 320px;
-            max-width: 38vw;
-            background: #ffffff;
-            border-right: 1px solid #d7dde3;
-            display: flex;
-            flex-direction: column;
+        .sidebar-backdrop.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .app-shell {
+            height: 100vh;
+            min-height: 100vh;
+            transition: padding-left 0.28s ease;
+            overflow: hidden;
+        }
+
+        .app-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 900;
+            width: min(var(--control-column-width), calc(100vw - 32px));
+            display: grid;
+            gap: 18px;
+            align-content: start;
+            padding: 24px 18px;
+            background: linear-gradient(180deg, #102a43 0%, #16324f 100%);
+            color: #f8fafc;
+            border-right: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 16px 0 40px rgba(15, 23, 42, 0.2);
+            transform: translateX(-100%);
+            transition: transform 0.28s ease;
             overflow-y: auto;
         }
 
+        .app-shell.with-sidebar-open .app-sidebar {
+            transform: translateX(0);
+        }
+
+        .app-sidebar-header {
+            display: grid;
+            gap: 8px;
+        }
+
+        .app-kicker {
+            margin: 0;
+            color: rgba(226, 232, 240, 0.76);
+            font-size: 0.76rem;
+            font-weight: bold;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .app-title {
+            margin: 0;
+            font-size: 1.45rem;
+            line-height: 1.2;
+        }
+
+        .app-description {
+            margin: 0;
+            color: rgba(226, 232, 240, 0.82);
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .sidebar-nav {
+            display: grid;
+            gap: 8px;
+        }
+
+        .sidebar-nav-button {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.24);
+            color: #e2e8f0;
+            font-size: 0.95rem;
+            font-weight: bold;
+            text-align: left;
+            transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .sidebar-nav-button:hover {
+            background: rgba(30, 64, 97, 0.72);
+        }
+
+        .sidebar-nav-button.active {
+            background: #f8fafc;
+            color: #102a43;
+            border-color: #f8fafc;
+            transform: translateX(2px);
+        }
+
+        .sidebar-info-card {
+            display: grid;
+            gap: 8px;
+            padding: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 14px;
+            background: rgba(15, 23, 42, 0.22);
+        }
+
+        .sidebar-info-title {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .sidebar-info-text {
+            margin: 0;
+            color: rgba(226, 232, 240, 0.82);
+            font-size: 0.84rem;
+            line-height: 1.5;
+        }
+
+        .sidebar-session {
+            display: grid;
+            gap: 10px;
+            padding: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 14px;
+            background: rgba(15, 23, 42, 0.28);
+        }
+
+        .app-main {
+            height: 100vh;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 14px 18px 18px;
+            overflow: hidden;
+        }
+
+        .app-topbar {
+            display: grid;
+            grid-template-columns: minmax(280px, var(--control-column-width)) minmax(0, 1fr);
+            align-items: center;
+            gap: 14px 18px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid rgba(199, 210, 219, 0.9);
+            border-radius: 18px;
+            box-shadow: 0 8px 22px rgba(148, 163, 184, 0.1);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 820;
+            flex: 0 0 auto;
+        }
+
+        .app-topbar.tracking-column-topbar {
+            grid-column: 1;
+            grid-row: 1;
+            grid-template-columns: 1fr;
+            gap: 0;
+            position: relative;
+            top: auto;
+            width: 100%;
+            padding: 10px 14px;
+            z-index: 1;
+        }
+
+        .app-topbar.tracking-column-topbar .app-topbar-session {
+            display: none;
+        }
+
+        .app-topbar-main {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            width: 100%;
+        }
+
+        .app-sidebar-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border-radius: 12px;
+            background: #102a43;
+            color: #f8fafc;
+            box-shadow: 0 8px 20px rgba(16, 42, 67, 0.18);
+            flex: 0 0 auto;
+        }
+
+        .app-sidebar-toggle:hover {
+            background: #16324f;
+        }
+
+        .hamburger-icon {
+            position: relative;
+            width: 18px;
+            height: 14px;
+        }
+
+        .hamburger-icon::before,
+        .hamburger-icon::after,
+        .hamburger-icon span {
+            content: "";
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            border-radius: 999px;
+            background: currentColor;
+            transition: transform 0.22s ease, opacity 0.22s ease;
+        }
+
+        .hamburger-icon::before {
+            top: 0;
+        }
+
+        .hamburger-icon span {
+            top: 6px;
+        }
+
+        .hamburger-icon::after {
+            top: 12px;
+        }
+
+        .app-shell.with-sidebar-open .hamburger-icon::before {
+            transform: translateY(6px) rotate(45deg);
+        }
+
+        .app-shell.with-sidebar-open .hamburger-icon span {
+            opacity: 0;
+        }
+
+        .app-shell.with-sidebar-open .hamburger-icon::after {
+            transform: translateY(-6px) rotate(-45deg);
+        }
+
+        .app-topbar-copy {
+            min-width: 0;
+        }
+
+        .app-topbar-title {
+            margin: 0;
+            font-size: 1.02rem;
+        }
+
+        .app-topbar-session {
+            display: grid;
+            justify-items: end;
+            gap: 2px;
+            color: #52616f;
+            font-size: 0.76rem;
+            text-align: right;
+        }
+
+        .app-view {
+            display: none;
+            min-width: 0;
+        }
+
+        .app-view.active {
+            display: grid;
+            gap: 14px;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+        }
+
+        #tracking-view.app-view.active {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow: hidden;
+        }
+
+        .view-header {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .tracking-view-header {
+            display: none;
+        }
+
+        .view-title {
+            margin: 0;
+            font-size: 1.6rem;
+            line-height: 1.2;
+        }
+
+        .view-description {
+            margin: 0;
+            color: #52616f;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .map-layout {
+            display: grid;
+            grid-template-columns: var(--control-column-width) minmax(0, 1fr);
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 18px;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
+        .trips-panel {
+            grid-column: 1;
+            grid-row: 2;
+            background: #ffffff;
+            border: 1px solid #d7dde3;
+            border-radius: 18px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+            height: 100%;
+        }
+
         .trips-panel-header {
-            padding: 12px;
+            padding: 18px;
             border-bottom: 1px solid #d7dde3;
+            background: linear-gradient(180deg, #f8fafc 0%, #eef4f7 100%);
+            flex: 0 0 auto;
         }
 
         .trips-panel-title {
-            margin: 0 0 3px;
-            font-size: 14px;
-        }
-
-        .trips-panel-help {
             margin: 0;
-            color: #52616f;
-            font-size: 11px;
+            font-size: 1rem;
         }
 
         .session-bar {
             display: grid;
             gap: 6px;
-            margin-top: 10px;
             color: #3c4856;
             font-size: 11px;
         }
@@ -242,34 +567,113 @@
         }
 
         .map-content {
-            flex: 1;
+            grid-column: 2;
+            grid-row: 1 / span 2;
+            height: 100%;
             min-width: 0;
             min-height: 0;
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-rows: minmax(var(--map-min-height), 1fr) var(--map-chart-divider-size) minmax(var(--chart-min-height), var(--chart-panel-height));
             position: relative;
+            background: #ffffff;
+            border: 1px solid #d7dde3;
+            border-radius: 18px;
+            overflow: hidden;
+        }
+
+        .map-stage {
+            position: relative;
+            min-height: 0;
+        }
+
+        .map-chart-divider {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, #f8fafc 0%, #eef4f7 100%);
+            border-top: 1px solid #d7dde3;
+            border-bottom: 1px solid #d7dde3;
+            cursor: row-resize;
+            touch-action: none;
+            user-select: none;
+        }
+
+        .map-chart-divider::before {
+            content: "";
+            width: 64px;
+            height: 4px;
+            border-radius: 999px;
+            background: #94a3b8;
+            box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
+        }
+
+        .map-content.is-resizing,
+        .map-content.is-resizing * {
+            cursor: row-resize;
+            user-select: none;
         }
 
         #map {
-            flex: 1 1 auto;
-            min-height: 360px;
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+        }
+
+        .map-floating-action {
+            position: absolute;
+            bottom: 32px;
+            z-index: 650;
+        }
+
+        .map-floating-action.left {
+            left: 16px;
+        }
+
+        .map-floating-action.right {
+            right: 16px;
+        }
+
+        .map-floating-button {
+            width: auto;
+            min-width: 0;
+            padding: 10px 14px;
+            border-radius: 999px;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
+        }
+
+        .category-select-control {
+            --category-select-color: transparent;
+            padding-left: 32px;
+            background-image: radial-gradient(circle at 14px center, var(--category-select-color) 0 5px, transparent 6px);
+            background-repeat: no-repeat;
+            background-size: 22px 100%;
+        }
+
+        .category-select-control.no-color {
+            padding-left: 8px;
+            background-image: none;
         }
 
         .speed-chart-panel {
             background: #ffffff;
-            border-top: 1px solid #d7dde3;
             padding: 12px 16px 14px;
+            min-height: 0;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 8px;
         }
 
         .speed-chart-title {
-            margin: 0 0 8px;
+            margin: 0;
             color: #1f2933;
             font-size: 14px;
         }
 
         .speed-chart-box {
             position: relative;
-            height: 230px;
+            height: 100%;
+            min-height: 0;
         }
 
         .speed-chart-empty {
@@ -286,21 +690,25 @@
 
         .sidebar-form {
             display: grid;
-            gap: 12px;
-            padding: 12px;
+            gap: 14px;
+            padding: 18px;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            scrollbar-gutter: stable;
         }
 
         .trip-filter-form {
-            display: grid;
-            gap: 12px;
+            display: contents;
             margin: 0;
         }
 
         .control-group {
             display: grid;
             gap: 8px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid #e2e8f0;
+            padding: 0;
+            border-bottom: 0;
         }
 
         .control-group:last-child {
@@ -308,9 +716,147 @@
             padding-bottom: 0;
         }
 
+        .accordion-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .accordion-item {
+            border: 1px solid #d7dde3;
+            border-radius: 16px;
+            background: #ffffff;
+            overflow: hidden;
+            box-shadow: 0 10px 24px rgba(148, 163, 184, 0.09);
+        }
+
+        .accordion-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 0;
+            background: #ffffff;
+            color: #1f2933;
+            font-weight: bold;
+        }
+
+        .accordion-trigger:hover {
+            background: #f8fafc;
+        }
+
+        .accordion-trigger-label {
+            display: grid;
+            gap: 2px;
+            text-align: left;
+        }
+
+        .accordion-trigger-title {
+            font-size: 0.96rem;
+        }
+
+        .accordion-trigger-help {
+            color: #52616f;
+            font-size: 0.76rem;
+            font-weight: normal;
+            line-height: 1.35;
+        }
+
+        .accordion-trigger-icon {
+            font-size: 1.05rem;
+            transition: transform 0.22s ease;
+        }
+
+        .accordion-item.open .accordion-trigger-icon {
+            transform: rotate(180deg);
+        }
+
+        .accordion-panel {
+            display: none;
+            gap: 12px;
+            padding: 0 16px 16px;
+            border-top: 1px solid #e2e8f0;
+            background: #fbfdff;
+        }
+
+        .accordion-item.open .accordion-panel {
+            display: grid;
+        }
+
+        .panel-stack {
+            display: grid;
+            gap: 12px;
+        }
+
+        .control-card {
+            display: grid;
+            gap: 10px;
+            padding: 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            background: #ffffff;
+        }
+
+        .control-card.soft-card {
+            background: #f8fafc;
+        }
+
         .admin-panel {
             display: grid;
             gap: 10px;
+        }
+
+        .admin-tab-nav {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .admin-tab-button {
+            width: auto;
+            padding: 9px 12px;
+            background: #dbe4ea;
+            color: #1f2933;
+        }
+
+        .admin-tab-button.active {
+            background: #1d7a8c;
+            color: #ffffff;
+        }
+
+        .admin-tab-panel {
+            display: none;
+            gap: 10px;
+        }
+
+        .admin-tab-panel.active {
+            display: grid;
+        }
+
+        .date-filter-section.pending {
+            border-color: #f59e0b;
+        }
+
+        .date-filter-actions {
+            display: none;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .date-filter-actions.visible {
+            display: grid;
+        }
+
+        .date-filter-status {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .date-filter-status.pending {
+            color: #b45309;
+            font-weight: bold;
         }
 
         .admin-form {
@@ -427,8 +973,63 @@
             gap: 6px;
         }
 
+        .button-row.two-column {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
         .secondary-button {
             background: #3c4856;
+        }
+
+        .text-link-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: auto;
+            padding: 10px 14px;
+            border-radius: 8px;
+            background: #1d7a8c;
+            color: #ffffff;
+            text-decoration: none;
+        }
+
+        .info-card,
+        .content-card {
+            display: grid;
+            gap: 12px;
+            padding: 18px;
+            background: #ffffff;
+            border: 1px solid #d7dde3;
+            border-radius: 18px;
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: 1.05rem;
+        }
+
+        .card-text {
+            margin: 0;
+            color: #52616f;
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+
+        .capture-layout,
+        .admin-view-layout {
+            display: grid;
+            gap: 18px;
+        }
+
+        .capture-layout {
+            grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+            align-items: start;
+        }
+
+        .capture-column,
+        .admin-stack {
+            display: grid;
+            gap: 18px;
         }
 
         .split-mode-button.active {
@@ -533,6 +1134,52 @@
             display: none;
         }
 
+        @media (max-width: 980px) {
+            .map-layout,
+            .capture-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .app-main {
+                padding: 16px;
+            }
+
+            .app-topbar {
+                grid-template-columns: 1fr;
+            }
+
+            .trips-panel {
+                order: 2;
+            }
+
+            .map-content {
+                order: 1;
+                min-height: 320px;
+            }
+
+            .app-topbar {
+                align-items: flex-start;
+            }
+
+            .app-topbar-session {
+                text-align: left;
+                justify-items: start;
+            }
+
+            #tracking-view.app-view.active {
+                overflow: hidden;
+            }
+
+            .map-layout {
+                grid-template-rows: minmax(320px, 42vh) minmax(0, 1fr);
+            }
+
+            .app-topbar.tracking-column-topbar {
+                grid-row: auto;
+                order: 1;
+            }
+        }
+
         @media (max-width: 560px) {
             .field,
             input,
@@ -543,22 +1190,22 @@
                 width: 100%;
             }
 
+            .app-main {
+                padding: 16px;
+            }
+
+            .app-sidebar {
+                width: min(var(--control-column-width), calc(100vw - 20px));
+                padding: 18px 16px;
+            }
+
             .map-layout {
-                display: block;
-                height: auto;
-                min-height: 0;
+                gap: 14px;
+                grid-template-rows: minmax(280px, 38vh) minmax(0, 1fr);
             }
 
-            .trips-panel {
-                width: 100%;
-                max-width: none;
-                border-right: 0;
-                border-bottom: 1px solid #d7dde3;
-            }
-
-            #map {
-                height: 75vh;
-                min-height: 360px;
+            .map-floating-button {
+                width: auto;
             }
 
             .speed-chart-panel {
@@ -568,28 +1215,75 @@
             .speed-chart-box {
                 height: 240px;
             }
+
+            .button-row,
+            .button-row.two-column,
+            .date-filter-actions {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (min-width: 981px) {
+            .app-shell.with-sidebar-open {
+                padding-left: var(--control-column-width);
+            }
         }
     </style>
 </head>
 <body>
-    <main class="map-layout">
-        <aside class="trips-panel" aria-label="Controles de recorridos">
-            <div class="trips-panel-header">
-                <h2 class="trips-panel-title">Recorridos</h2>
-                <p class="trips-panel-help">Filtra, selecciona y reproduce recorridos.</p>
-                <div class="session-bar" aria-live="polite">
+    <main class="app-shell">
+        <aside class="app-sidebar" aria-label="Navegacion principal">
+            <div class="app-sidebar-header">
+                <p class="app-kicker">Rastreo Vehicular</p>
+                <h1 class="app-title">Panel principal</h1>
+                <p class="app-description">Una entrada clara para monitoreo, captura y administracion sin mezclar flujos.</p>
+            </div>
+
+            <nav class="sidebar-nav" aria-label="Secciones">
+                <button class="sidebar-nav-button active" id="nav-tracking-button" type="button" data-view-target="tracking">Seguimiento</button>
+                <button class="sidebar-nav-button" id="nav-capture-button" type="button" data-view-target="capture">Captura</button>
+                <button class="sidebar-nav-button hidden-control" id="nav-admin-button" type="button" data-view-target="admin">Administracion</button>
+            </nav>
+
+            <section class="sidebar-info-card" aria-live="polite">
+                <h2 class="sidebar-info-title" id="sidebar-context-title">Seguimiento</h2>
+                <p class="sidebar-info-text" id="sidebar-context-description">Visualiza recorridos, mapa, replay y estado de vehiculos visibles para tu usuario.</p>
+            </section>
+
+            <section class="sidebar-session" aria-live="polite">
+                <div class="session-bar">
                     <div class="session-actions">
                         <span>Sesion:</span>
                         <span class="session-user" id="session-user">Cargando...</span>
-                        <button class="session-button secondary-button" id="logout-button" type="button">Salir</button>
                     </div>
                     <span id="session-scope"></span>
                 </div>
+                <button class="session-button secondary-button" id="logout-button" type="button">Salir</button>
+            </section>
+        </aside>
+
+        <section class="app-main">
+            <section class="app-view active" id="tracking-view" aria-labelledby="tracking-view-title">
+                <header class="view-header tracking-view-header">
+                    <h2 class="view-title" id="tracking-view-title">Seguimiento</h2>
+                    <p class="view-description">Mapa, filtros y analisis del recorrido en una vista enfocada solo en monitoreo.</p>
+                </header>
+
+                <div class="map-layout">
+        <aside class="trips-panel" aria-label="Controles de recorridos">
+            <div class="trips-panel-header">
+                <h2 class="trips-panel-title">Panel de seguimiento</h2>
             </div>
             <div class="sidebar-form">
                 <form class="trip-filter-form" id="trip-form">
                     <section class="control-group" aria-labelledby="vehicle-filter-title">
                     <h3 class="control-group-title" id="vehicle-filter-title">Selección de vehículo</h3>
+                    <div class="field hidden-control" id="tracking-user-filter-field">
+                        <label for="tracking-user-select">Usuario</label>
+                        <select id="tracking-user-select" name="tracking-user-select">
+                            <option value="">Ver todos</option>
+                        </select>
+                    </div>
                     <div class="field">
                         <label for="vehicle-select">Vehículo</label>
                         <select id="vehicle-select" name="vehicle-select">
@@ -609,7 +1303,7 @@
                     </div>
                     </section>
 
-                    <section class="control-group" aria-labelledby="period-filter-title">
+                    <section class="control-group date-filter-section" id="date-filter-section" aria-labelledby="period-filter-title">
                     <h3 class="control-group-title" id="period-filter-title">Selección de período</h3>
                     <div class="field">
                         <label for="filter-start">Inicio</label>
@@ -618,6 +1312,11 @@
                     <div class="field">
                         <label for="filter-end">Fin</label>
                         <input id="filter-end" name="filter-end" type="datetime-local">
+                    </div>
+                    <p class="date-filter-status" id="date-filter-status">Sin cambios pendientes en fechas.</p>
+                    <div class="date-filter-actions" id="date-filter-actions">
+                        <button id="apply-date-filter-button" type="button">Aplicar</button>
+                        <button id="cancel-date-filter-button" class="secondary-button" type="button">Cancelar</button>
                     </div>
                     <button id="load-all-button" class="secondary-button" type="button">Ver todo</button>
                     </section>
@@ -642,84 +1341,25 @@
                     <p class="live-tracking-status" id="live-tracking-status">Sin posicion actual disponible.</p>
                 </section>
 
-                <section class="control-group hidden-control" id="admin-management-section" aria-labelledby="admin-management-title">
-                    <h3 class="control-group-title" id="admin-management-title">Administracion</h3>
-                    <div class="admin-panel">
-                        <form class="admin-form" id="create-user-form">
-                            <div class="field">
-                                <label for="new-user-username">Usuario</label>
-                                <input id="new-user-username" name="username" autocomplete="off" required>
-                            </div>
-                            <div class="field">
-                                <label for="new-user-full-name">Nombre</label>
-                                <input id="new-user-full-name" name="full_name" autocomplete="off" required>
-                            </div>
-                            <div class="field">
-                                <label for="new-user-email">Email</label>
-                                <input id="new-user-email" name="email" type="email" autocomplete="off">
-                            </div>
-                            <div class="field">
-                                <label for="new-user-password">Password</label>
-                                <input id="new-user-password" name="password" type="password" autocomplete="new-password" required>
-                            </div>
-                            <div class="field">
-                                <label for="new-user-role">Rol</label>
-                                <select id="new-user-role" name="role">
-                                    <option value="user">user</option>
-                                    <option value="admin">admin</option>
-                                </select>
-                            </div>
-                            <button id="create-user-button" type="submit">Crear usuario</button>
-                        </form>
+                <div class="trip-summary" id="trip-summary" aria-live="polite"></div>
 
-                        <form class="admin-form" id="create-vehicle-form">
-                            <div class="field">
-                                <label for="new-vehicle-name">Vehiculo</label>
-                                <input id="new-vehicle-name" name="nombre" autocomplete="off" required>
-                            </div>
-                            <div class="field">
-                                <label for="new-vehicle-plate">Matricula</label>
-                                <input id="new-vehicle-plate" name="matricula" autocomplete="off" required>
-                            </div>
-                            <div class="field">
-                                <label for="new-vehicle-description">Descripcion</label>
-                                <input id="new-vehicle-description" name="descripcion" autocomplete="off">
-                            </div>
-                            <button id="create-vehicle-button" type="submit">Crear vehiculo</button>
-                        </form>
+                <section class="control-group" aria-labelledby="category-legend-title">
+                    <h3 class="control-group-title" id="category-legend-title">Categorías</h3>
+                    <div class="category-legend" id="category-legend"></div>
+                </section>
 
-                        <form class="admin-form" id="vehicle-access-form">
-                            <div class="field">
-                                <label for="access-user-select">Usuario</label>
-                                <select id="access-user-select"></select>
-                            </div>
-                            <div class="field">
-                                <label>Vehiculos asignados</label>
-                                <p class="field-help">Marca uno o varios vehiculos y luego guarda los accesos.</p>
-                                <div class="checkbox-list" id="access-vehicle-checkboxes" aria-live="polite"></div>
-                            </div>
-                            <button id="save-access-button" type="submit">Guardar accesos</button>
-                        </form>
-
-                        <form class="admin-form" id="delete-user-form">
-                            <div class="field">
-                                <label for="delete-user-select">Eliminar usuario</label>
-                                <select id="delete-user-select"></select>
-                            </div>
-                            <button id="delete-user-button" class="danger-button" type="submit">Eliminar usuario</button>
-                        </form>
-
-                        <form class="admin-form" id="delete-vehicle-form">
-                            <div class="field">
-                                <label for="delete-vehicle-select">Eliminar vehiculo</label>
-                                <select id="delete-vehicle-select"></select>
-                            </div>
-                            <button id="delete-vehicle-button" class="danger-button" type="submit">Eliminar vehiculo</button>
-                        </form>
-
-                        <div class="access-list" id="access-list" aria-live="polite"></div>
-                        <div class="admin-message" id="admin-message" aria-live="polite"></div>
+                <section class="control-group" aria-labelledby="replay-title">
+                    <h3 class="control-group-title" id="replay-title">Replay del recorrido</h3>
+                    <div class="button-row">
+                        <button id="replay-button" type="button">Play</button>
+                        <button id="pause-replay-button" class="secondary-button" type="button">Pause</button>
+                        <button id="stop-replay-button" class="secondary-button" type="button">Stop</button>
                     </div>
+                </section>
+
+                <section class="control-group" id="split-trip-section" aria-labelledby="split-trip-title">
+                    <h3 class="control-group-title" id="split-trip-title">Dividir recorrido</h3>
+                    <button id="split-trip-button" class="secondary-button split-mode-button" type="button">Dividir recorrido</button>
                 </section>
 
                 <section class="control-group" id="manual-draw-section" aria-labelledby="manual-draw-title">
@@ -749,38 +1389,6 @@
                     <p class="manual-draw-status" id="manual-draw-status">Elegir vehiculo y categoria antes de dibujar.</p>
                 </section>
 
-                <div class="trip-summary" id="trip-summary" aria-live="polite"></div>
-
-                <section class="control-group" aria-labelledby="category-legend-title">
-                    <h3 class="control-group-title" id="category-legend-title">Categorías</h3>
-                    <div class="category-legend" id="category-legend"></div>
-                </section>
-
-                <section class="control-group" aria-labelledby="replay-title">
-                    <h3 class="control-group-title" id="replay-title">Replay del recorrido</h3>
-                    <div class="button-row">
-                        <button id="replay-button" type="button">Play</button>
-                        <button id="pause-replay-button" class="secondary-button" type="button">Pause</button>
-                        <button id="stop-replay-button" class="secondary-button" type="button">Stop</button>
-                    </div>
-                </section>
-
-                <section class="control-group">
-                    <button id="center-route-button" type="button">Centrar recorrido</button>
-                </section>
-
-                <section class="control-group" id="split-trip-section" aria-labelledby="split-trip-title">
-                    <h3 class="control-group-title" id="split-trip-title">Dividir recorrido</h3>
-                    <button id="split-trip-button" class="secondary-button split-mode-button" type="button">Dividir recorrido</button>
-                </section>
-
-                <section class="control-group">
-                    <div class="button-stack">
-                        <button id="apply-filter-button" type="button">Aplicar filtros</button>
-                        <button id="clear-filter-button" class="secondary-button" type="button">Limpiar filtros</button>
-                    </div>
-                </section>
-
                 <section class="control-group">
                     <label class="checkbox-field" for="auto-refresh">
                         <input id="auto-refresh" type="checkbox">
@@ -792,13 +1400,163 @@
             </div>
         </aside>
         <section class="map-content" aria-label="Mapa y analisis del recorrido">
-            <div id="map"></div>
-            <aside class="pinned-vehicle-panel" id="pinned-vehicle-panel" aria-live="polite"></aside>
+            <div class="map-stage">
+                <div id="map"></div>
+                <aside class="pinned-vehicle-panel" id="pinned-vehicle-panel" aria-live="polite"></aside>
+                <div class="map-floating-action left">
+                    <button id="clear-filter-button" class="secondary-button map-floating-button" type="button">Limpiar filtros</button>
+                </div>
+                <div class="map-floating-action right">
+                    <button id="center-route-button" class="map-floating-button" type="button">Centrar mapa</button>
+                </div>
+            </div>
+            <div
+                class="map-chart-divider"
+                id="map-chart-divider"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Redimensionar grafico"
+                tabindex="0"
+            ></div>
             <section class="speed-chart-panel" aria-labelledby="speed-chart-title">
                 <h3 class="speed-chart-title" id="speed-chart-title">Velocidad vs distancia</h3>
                 <div class="speed-chart-box">
                     <canvas id="speed-distance-chart"></canvas>
                     <p class="speed-chart-empty" id="speed-chart-empty">Selecciona un recorrido para ver el grafico.</p>
+                </div>
+            </section>
+        </section>
+                </div>
+            </section>
+
+            <section class="app-view" id="capture-view" aria-labelledby="capture-view-title">
+                <header class="view-header">
+                    <h2 class="view-title" id="capture-view-title">Captura</h2>
+                    <p class="view-description">Separa las tareas de carga de datos y dibujo manual del monitoreo historico.</p>
+                </header>
+
+                <div class="capture-layout">
+                    <div class="capture-column">
+                        <section class="info-card" aria-labelledby="capture-live-title">
+                            <h3 class="card-title" id="capture-live-title">Captura en vivo</h3>
+                            <p class="card-text">La captura GPS en vivo sigue usando el flujo actual. Desde aqui queda claramente separada del mapa historico para evitar confusiones.</p>
+                            <a class="text-link-button" href="live_tracking.html">Abrir captura en vivo</a>
+                        </section>
+
+                        <section class="info-card">
+                            <h3 class="card-title">Dibujo manual desde el mapa</h3>
+                            <p class="card-text">La carga manual se mantiene junto al mapa en Seguimiento para no perder la interaccion directa sobre el recorrido.</p>
+                        </section>
+                    </div>
+
+                    <aside class="capture-column">
+                        <section class="info-card">
+                            <h3 class="card-title">Como usar esta vista</h3>
+                            <p class="card-text">Usa "Abrir captura en vivo" para registrar posicionamiento en tiempo real y el dibujo manual cuando necesites cargar o corregir un recorrido desde el mapa.</p>
+                        </section>
+                        <section class="info-card">
+                            <h3 class="card-title">Permisos</h3>
+                            <p class="card-text">Las opciones visibles respetan tus permisos actuales. Si no puedes editar recorridos, la captura manual se oculta automaticamente.</p>
+                        </section>
+                    </aside>
+                </div>
+            </section>
+
+            <section class="app-view hidden-control" id="admin-management-section" aria-labelledby="admin-view-title">
+                <header class="view-header">
+                    <h2 class="view-title" id="admin-view-title">Administracion</h2>
+                    <p class="view-description">Gestion centralizada de usuarios, vehiculos y accesos, separada de seguimiento y captura.</p>
+                </header>
+
+                <div class="admin-view-layout">
+                    <section class="content-card">
+                        <div class="admin-tab-nav" role="tablist" aria-label="Subsecciones de administracion">
+                            <button class="admin-tab-button active" type="button" data-admin-tab="users">Usuarios</button>
+                            <button class="admin-tab-button" type="button" data-admin-tab="vehicles">Vehiculos</button>
+                            <button class="admin-tab-button" type="button" data-admin-tab="access">Accesos</button>
+                        </div>
+                        <div class="admin-message" id="admin-message" aria-live="polite"></div>
+
+                        <section class="admin-tab-panel active" id="admin-tab-users" role="tabpanel">
+                            <form class="admin-form" id="create-user-form">
+                                <div class="field">
+                                    <label for="new-user-username">Usuario</label>
+                                    <input id="new-user-username" name="username" autocomplete="off" required>
+                                </div>
+                                <div class="field">
+                                    <label for="new-user-full-name">Nombre</label>
+                                    <input id="new-user-full-name" name="full_name" autocomplete="off" required>
+                                </div>
+                                <div class="field">
+                                    <label for="new-user-email">Email</label>
+                                    <input id="new-user-email" name="email" type="email" autocomplete="off">
+                                </div>
+                                <div class="field">
+                                    <label for="new-user-password">Password</label>
+                                    <input id="new-user-password" name="password" type="password" autocomplete="new-password" required>
+                                </div>
+                                <div class="field">
+                                    <label for="new-user-role">Rol</label>
+                                    <select id="new-user-role" name="role">
+                                        <option value="user">user</option>
+                                        <option value="admin">admin</option>
+                                    </select>
+                                </div>
+                                <button id="create-user-button" type="submit">Crear usuario</button>
+                            </form>
+
+                            <form class="admin-form" id="delete-user-form">
+                                <div class="field">
+                                    <label for="delete-user-select">Eliminar usuario</label>
+                                    <select id="delete-user-select"></select>
+                                </div>
+                                <button id="delete-user-button" class="danger-button" type="submit">Eliminar usuario</button>
+                            </form>
+                        </section>
+
+                        <section class="admin-tab-panel" id="admin-tab-vehicles" role="tabpanel">
+                            <form class="admin-form" id="create-vehicle-form">
+                                <div class="field">
+                                    <label for="new-vehicle-name">Vehiculo</label>
+                                    <input id="new-vehicle-name" name="nombre" autocomplete="off" required>
+                                </div>
+                                <div class="field">
+                                    <label for="new-vehicle-plate">Matricula</label>
+                                    <input id="new-vehicle-plate" name="matricula" autocomplete="off" required>
+                                </div>
+                                <div class="field">
+                                    <label for="new-vehicle-description">Descripcion</label>
+                                    <input id="new-vehicle-description" name="descripcion" autocomplete="off">
+                                </div>
+                                <button id="create-vehicle-button" type="submit">Crear vehiculo</button>
+                            </form>
+
+                            <form class="admin-form" id="delete-vehicle-form">
+                                <div class="field">
+                                    <label for="delete-vehicle-select">Eliminar vehiculo</label>
+                                    <select id="delete-vehicle-select"></select>
+                                </div>
+                                <button id="delete-vehicle-button" class="danger-button" type="submit">Eliminar vehiculo</button>
+                            </form>
+                        </section>
+
+                        <section class="admin-tab-panel" id="admin-tab-access" role="tabpanel">
+                            <form class="admin-form" id="vehicle-access-form">
+                                <div class="field">
+                                    <label for="access-user-select">Usuario</label>
+                                    <select id="access-user-select"></select>
+                                </div>
+                                <div class="field">
+                                    <label>Vehiculos asignados</label>
+                                    <p class="field-help">Marca uno o varios vehiculos y luego guarda los accesos.</p>
+                                    <div class="checkbox-list" id="access-vehicle-checkboxes" aria-live="polite"></div>
+                                </div>
+                                <button id="save-access-button" type="submit">Guardar accesos</button>
+                            </form>
+
+                            <div class="access-list" id="access-list" aria-live="polite"></div>
+                        </section>
+                    </section>
                 </div>
             </section>
         </section>
@@ -813,14 +1571,168 @@
     <script src="js/auth.js"></script>
     <script>
         console.log("TRIP_MAP_SERVIDO_OK");
+        const appShellElement = document.querySelector(".app-shell");
+        const appSidebarElement = document.querySelector(".app-sidebar");
+        const appMainElement = document.querySelector(".app-main");
+        const trackingViewElement = document.getElementById("tracking-view");
+        const tripsPanelElement = trackingViewElement ? trackingViewElement.querySelector(".trips-panel") : null;
+        const mapLayoutElement = trackingViewElement ? trackingViewElement.querySelector(".map-layout") : null;
+
+        if (appShellElement) {
+            appShellElement.id = "app-shell";
+            appShellElement.classList.add("sidebar-collapsed");
+        }
+
+        if (appSidebarElement) {
+            appSidebarElement.id = "app-sidebar";
+        }
+
+        if (appShellElement && !document.getElementById("sidebar-backdrop")) {
+            const backdrop = document.createElement("div");
+            backdrop.className = "sidebar-backdrop";
+            backdrop.id = "sidebar-backdrop";
+            backdrop.hidden = true;
+            document.body.insertBefore(backdrop, appShellElement);
+        }
+
+        if (appMainElement && !document.getElementById("sidebar-toggle-button")) {
+            const topbar = document.createElement("header");
+            topbar.className = "app-topbar";
+            topbar.innerHTML = [
+                '<div class="app-topbar-main">',
+                '  <button class="app-sidebar-toggle" id="sidebar-toggle-button" type="button" aria-controls="app-sidebar" aria-expanded="false" aria-label="Abrir menu principal">',
+                '      <span class="hamburger-icon" aria-hidden="true"><span></span></span>',
+                '  </button>',
+                '  <div class="app-topbar-copy">',
+                '      <h2 class="app-topbar-title">Panel principal</h2>',
+                '  </div>',
+                '</div>',
+                '<div class="app-topbar-session">',
+                '  <strong id="topbar-session-user">Sesion</strong>',
+                '  <div id="topbar-session-scope">Preparando contexto...</div>',
+                '</div>'
+            ].join("");
+            appMainElement.insertBefore(topbar, appMainElement.firstChild);
+        }
+
+        if (tripsPanelElement && !tripsPanelElement.querySelector(".accordion-list")) {
+            const sidebarFormElement = tripsPanelElement.querySelector(".sidebar-form");
+            const tripFormElement = document.getElementById("trip-form");
+            const vehicleSectionElement = tripFormElement ? tripFormElement.querySelector('[aria-labelledby="vehicle-filter-title"]') : null;
+            const dateSectionElement = document.getElementById("date-filter-section");
+            const tripListSectionElement = tripFormElement ? tripFormElement.querySelector('[aria-labelledby="trip-filter-title"]') : null;
+            const liveSectionElement = tripsPanelElement.querySelector('[aria-labelledby="live-tracking-title"]');
+            const tripSummaryElement = document.getElementById("trip-summary");
+            const legendSectionElement = tripsPanelElement.querySelector('[aria-labelledby="category-legend-title"]');
+            const replaySectionElement = tripsPanelElement.querySelector('[aria-labelledby="replay-title"]');
+            const splitSectionElement = document.getElementById("split-trip-section");
+            const manualSectionElement = document.getElementById("manual-draw-section");
+            const autoRefreshSectionElement = document.getElementById("auto-refresh") ? document.getElementById("auto-refresh").closest("section") : null;
+
+            const createAccordionItem = (name, title, help, open) => {
+                const item = document.createElement("section");
+                item.className = `accordion-item${open ? " open" : ""}`;
+                item.dataset.accordionItem = name;
+                item.innerHTML = [
+                    `<button class="accordion-trigger" type="button" data-accordion-target="${name}" aria-expanded="${open ? "true" : "false"}">`,
+                    '  <span class="accordion-trigger-label">',
+                    `      <span class="accordion-trigger-title">${title}</span>`,
+                    `      <span class="accordion-trigger-help">${help}</span>`,
+                    '  </span>',
+                    '  <span class="accordion-trigger-icon" aria-hidden="true">▾</span>',
+                    '</button>',
+                    `<div class="accordion-panel" id="accordion-panel-${name}"${open ? "" : " hidden"}></div>`
+                ].join("");
+                return item;
+            };
+
+            const accordionListElement = document.createElement("div");
+            accordionListElement.className = "accordion-list";
+
+            const selectionItem = createAccordionItem("selection", "Seleccion", "Vehiculo, fechas, categoria y recorrido.", true);
+            const managementItem = createAccordionItem("management", "Gestion de recorridos", "Carga, replay, centrado y control del recorrido activo.", true);
+            const designItem = createAccordionItem("design", "Diseno de recorridos", "Dibujo manual, division y herramientas de edicion.", false);
+            const selectionPanel = selectionItem.querySelector(".accordion-panel");
+            const managementPanel = managementItem.querySelector(".accordion-panel");
+            const designPanel = designItem.querySelector(".accordion-panel");
+
+            [vehicleSectionElement, dateSectionElement, tripListSectionElement].forEach((element) => {
+                if (element) {
+                    element.classList.add("control-card");
+                    if (tripFormElement) {
+                        tripFormElement.appendChild(element);
+                    }
+                }
+            });
+
+            if (tripFormElement) {
+                selectionPanel.appendChild(tripFormElement);
+            }
+
+            [liveSectionElement, replaySectionElement].forEach((element) => {
+                if (element) {
+                    element.classList.add("control-card");
+                    managementPanel.appendChild(element);
+                }
+            });
+
+            if (tripSummaryElement) {
+                managementPanel.insertBefore(tripSummaryElement, replaySectionElement || null);
+            }
+
+            if (!document.getElementById("clear-trip-selection-button")) {
+                const selectionActionsCard = document.createElement("section");
+                selectionActionsCard.className = "control-card";
+                selectionActionsCard.setAttribute("aria-label", "Acciones de seleccion");
+                const buttonStack = document.createElement("div");
+                buttonStack.className = "button-stack";
+                const clearSelectionButton = document.createElement("button");
+                clearSelectionButton.id = "clear-trip-selection-button";
+                clearSelectionButton.type = "button";
+                clearSelectionButton.className = "secondary-button";
+                clearSelectionButton.textContent = "Borrar seleccion";
+                buttonStack.appendChild(clearSelectionButton);
+                selectionActionsCard.appendChild(buttonStack);
+                managementPanel.appendChild(selectionActionsCard);
+            }
+
+            [manualSectionElement, splitSectionElement].forEach((element) => {
+                if (element) {
+                    element.classList.add("control-card");
+                    designPanel.appendChild(element);
+                }
+            });
+
+            [legendSectionElement, autoRefreshSectionElement].forEach((element) => {
+                if (element) {
+                    element.classList.add("control-card");
+                    managementPanel.appendChild(element);
+                }
+            });
+
+            if (sidebarFormElement) {
+                sidebarFormElement.innerHTML = "";
+                [selectionItem, managementItem, designItem].forEach((item) => {
+                    accordionListElement.appendChild(item);
+                });
+                sidebarFormElement.appendChild(accordionListElement);
+            }
+        }
+
         const apiBaseUrl = window.RastreoConfig?.apiBaseUrl || window.location.origin;
         const auth = window.RastreoAuth;
         const form = document.getElementById("trip-form");
+        const trackingUserFilterField = document.getElementById("tracking-user-filter-field");
+        const trackingUserSelect = document.getElementById("tracking-user-select");
         const vehicleSelect = document.getElementById("vehicle-select");
         const categoryFilterSelect = document.getElementById("category-filter-select");
         const filterStartInput = document.getElementById("filter-start");
         const filterEndInput = document.getElementById("filter-end");
-        const applyFilterButton = document.getElementById("apply-filter-button");
+        const dateFilterSection = document.getElementById("date-filter-section");
+        const dateFilterStatus = document.getElementById("date-filter-status");
+        const dateFilterActions = document.getElementById("date-filter-actions");
+        const applyDateFilterButton = document.getElementById("apply-date-filter-button");
+        const cancelDateFilterButton = document.getElementById("cancel-date-filter-button");
         const clearFilterButton = document.getElementById("clear-filter-button");
         const loadAllButton = document.getElementById("load-all-button");
         const tripSelect = document.getElementById("trip-select");
@@ -852,9 +1764,29 @@
         const sessionUser = document.getElementById("session-user");
         const sessionScope = document.getElementById("session-scope");
         const logoutButton = document.getElementById("logout-button");
+        const appShell = document.getElementById("app-shell");
+        const appSidebar = document.getElementById("app-sidebar");
+        const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+        const sidebarToggleButton = document.getElementById("sidebar-toggle-button");
+        const topbarSessionUser = document.getElementById("topbar-session-user");
+        const topbarSessionScope = document.getElementById("topbar-session-scope");
+        const trackingView = document.getElementById("tracking-view");
+        const captureView = document.getElementById("capture-view");
+        const mapContent = trackingView ? trackingView.querySelector(".map-content") : null;
+        const mapChartDivider = document.getElementById("map-chart-divider");
         const manualDrawSection = document.getElementById("manual-draw-section");
         const splitTripSection = document.getElementById("split-trip-section");
         const adminManagementSection = document.getElementById("admin-management-section");
+        const navTrackingButton = document.getElementById("nav-tracking-button");
+        const navCaptureButton = document.getElementById("nav-capture-button");
+        const navAdminButton = document.getElementById("nav-admin-button");
+        const sidebarContextTitle = document.getElementById("sidebar-context-title");
+        const sidebarContextDescription = document.getElementById("sidebar-context-description");
+        const trackingSummaryVehicle = document.getElementById("tracking-summary-vehicle");
+        const trackingSummaryStatus = document.getElementById("tracking-summary-status");
+        const trackingSummaryTrip = document.getElementById("tracking-summary-trip");
+        const trackingSummaryCenterButton = document.getElementById("tracking-summary-center-button");
+        const clearTripSelectionButton = document.getElementById("clear-trip-selection-button");
         const createUserForm = document.getElementById("create-user-form");
         const createVehicleForm = document.getElementById("create-vehicle-form");
         const vehicleAccessForm = document.getElementById("vehicle-access-form");
@@ -871,6 +1803,16 @@
         const saveAccessButton = document.getElementById("save-access-button");
         const deleteUserButton = document.getElementById("delete-user-button");
         const deleteVehicleButton = document.getElementById("delete-vehicle-button");
+        const viewButtons = [navTrackingButton, navCaptureButton, navAdminButton];
+        const adminTabButtons = [...document.querySelectorAll(".admin-tab-button")];
+        const adminTabPanels = [...document.querySelectorAll(".admin-tab-panel")];
+        const accordionItems = [...document.querySelectorAll("[data-accordion-item]")];
+        const accordionButtons = [...document.querySelectorAll("[data-accordion-target]")];
+        const MAP_MIN_HEIGHT = 260;
+        const CHART_MIN_HEIGHT = 180;
+        const DIVIDER_HEIGHT = 12;
+        let isResizingMapChart = false;
+        let resizeDragState = null;
 
         const map = L.map("map").setView([-34.9011, -56.1645], 12);
         setTimeout(() => {
@@ -940,6 +1882,68 @@
         let pendingCategoryTripId = null;
         let dataLoadVersion = 0;
         let currentUser = null;
+        let currentView = "tracking";
+        let isSidebarOpen = false;
+
+        function refreshTrackingWorkspaceSize() {
+            if (map) {
+                map.invalidateSize();
+            }
+            if (speedDistanceChart) {
+                speedDistanceChart.resize();
+            }
+        }
+
+        function clampChartPanelHeight(requestedHeight) {
+            if (!mapContent) {
+                return requestedHeight;
+            }
+            const containerHeight = mapContent.clientHeight || 0;
+            const maxChartHeight = Math.max(CHART_MIN_HEIGHT, containerHeight - MAP_MIN_HEIGHT - DIVIDER_HEIGHT);
+            return Math.min(Math.max(requestedHeight, CHART_MIN_HEIGHT), maxChartHeight);
+        }
+
+        function setChartPanelHeight(nextHeight) {
+            if (!mapContent) {
+                return;
+            }
+            const safeHeight = clampChartPanelHeight(nextHeight);
+            mapContent.style.setProperty("--chart-panel-height", `${safeHeight}px`);
+            window.requestAnimationFrame(refreshTrackingWorkspaceSize);
+        }
+
+        function syncTrackingSplitLayout() {
+            if (!mapContent) {
+                return;
+            }
+            const currentHeight = parseFloat(getComputedStyle(mapContent).getPropertyValue("--chart-panel-height")) || CHART_MIN_HEIGHT;
+            setChartPanelHeight(currentHeight);
+        }
+
+        function stopMapChartResize() {
+            if (!isResizingMapChart || !resizeDragState) {
+                return;
+            }
+            const pointerId = resizeDragState.pointerId;
+            isResizingMapChart = false;
+            mapContent?.classList.remove("is-resizing");
+            document.body.style.removeProperty("cursor");
+            document.body.style.removeProperty("user-select");
+            if (mapChartDivider?.releasePointerCapture && pointerId !== undefined) {
+                mapChartDivider.releasePointerCapture(pointerId);
+            }
+            resizeDragState = null;
+            refreshTrackingWorkspaceSize();
+        }
+
+        function handleMapChartResize(pointerClientY) {
+            if (!isResizingMapChart || !resizeDragState) {
+                return;
+            }
+            const deltaY = pointerClientY - resizeDragState.startY;
+            setChartPanelHeight(resizeDragState.startChartHeight - deltaY);
+        }
+        let activeDateFilterValues = { start: "", end: "" };
         let adminUsersCache = [];
         let adminAssignmentsCache = new Map();
         const tripCategoryOptions = ["Trabajo", "Ocio", "Personal", "Otro"];
@@ -983,6 +1987,20 @@
                 fillOpacity: 0.76
             }
         };
+        const viewMetadata = {
+            tracking: {
+                title: "Seguimiento",
+                description: "Visualiza recorridos, mapa, replay y estado de vehiculos visibles para tu usuario."
+            },
+            capture: {
+                title: "Captura",
+                description: "Accede a la captura en vivo y a las herramientas relacionadas sin mezclar administracion."
+            },
+            admin: {
+                title: "Administracion",
+                description: "Gestiona usuarios, vehiculos y accesos desde una vista separada y ordenada."
+            }
+        };
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
@@ -992,6 +2010,160 @@
         function setMessage(text, isError = false) {
             message.textContent = text;
             message.classList.toggle("error", isError);
+            updateTrackingSummaryBar();
+        }
+
+        function setSidebarContext(viewName) {
+            const metadata = viewMetadata[viewName] || viewMetadata.tracking;
+            sidebarContextTitle.textContent = metadata.title;
+            sidebarContextDescription.textContent = metadata.description;
+        }
+
+        function syncTopbarForView(viewName) {
+            const topbarElement = document.querySelector(".app-topbar");
+            if (!appMainElement || !topbarElement) {
+                return;
+            }
+            const shouldAttachToTrackingColumn = viewName === "tracking" && mapLayoutElement;
+            if (shouldAttachToTrackingColumn) {
+                if (topbarElement.parentElement !== mapLayoutElement) {
+                    mapLayoutElement.insertBefore(topbarElement, mapLayoutElement.firstChild);
+                }
+                topbarElement.classList.add("tracking-column-topbar");
+                return;
+            }
+
+            if (topbarElement.parentElement !== appMainElement) {
+                appMainElement.insertBefore(topbarElement, appMainElement.firstChild);
+            }
+            topbarElement.classList.remove("tracking-column-topbar");
+        }
+
+        function isMobileLayout() {
+            return window.matchMedia("(max-width: 980px)").matches;
+        }
+
+        function syncSidebarBackdrop() {
+            const showBackdrop = isMobileLayout() && isSidebarOpen;
+            if (sidebarBackdrop) {
+                sidebarBackdrop.hidden = !showBackdrop;
+                sidebarBackdrop.classList.toggle("visible", showBackdrop);
+            }
+        }
+
+        function setSidebarOpen(nextValue) {
+            isSidebarOpen = Boolean(nextValue);
+            appShell.classList.toggle("with-sidebar-open", isSidebarOpen);
+            appShell.classList.toggle("sidebar-collapsed", !isSidebarOpen);
+            if (sidebarToggleButton) {
+                sidebarToggleButton.setAttribute("aria-expanded", String(isSidebarOpen));
+                sidebarToggleButton.setAttribute("aria-label", isSidebarOpen ? "Cerrar menu principal" : "Abrir menu principal");
+            }
+            syncSidebarBackdrop();
+
+            if (currentView === "tracking") {
+                window.setTimeout(() => {
+                    map.invalidateSize();
+                }, 140);
+            }
+        }
+
+        function toggleSidebar(forceValue) {
+            const nextValue = typeof forceValue === "boolean" ? forceValue : !isSidebarOpen;
+            setSidebarOpen(nextValue);
+        }
+
+        function setAccordionOpen(name, open) {
+            const item = accordionItems.find((entry) => entry.dataset.accordionItem === name);
+            const trigger = accordionButtons.find((entry) => entry.dataset.accordionTarget === name);
+            const panel = document.getElementById(`accordion-panel-${name}`);
+
+            if (!item || !trigger || !panel) {
+                return;
+            }
+
+            item.classList.toggle("open", open);
+            trigger.setAttribute("aria-expanded", String(open));
+            panel.hidden = !open;
+        }
+
+        function updateTrackingSummaryBar() {
+            const canCenterMap = currentTripsWithPoints.length || currentPoints.length;
+            if (centerRouteButton) {
+                centerRouteButton.disabled = !canCenterMap;
+            }
+
+            if (clearFilterButton) {
+                clearFilterButton.disabled = !hasActiveTrackingFilters();
+            }
+
+            if (trackingSummaryCenterButton) {
+                trackingSummaryCenterButton.disabled = !canCenterMap;
+            }
+
+            if (!trackingSummaryVehicle || !trackingSummaryStatus || !trackingSummaryTrip) {
+                return;
+            }
+
+            const selectedVehicleId = getSelectedVehicleId();
+            const selectedItem = getSelectedTripItem();
+            const status = isManualDrawingMode
+                ? "Diseno manual activo"
+                : isSplitMode
+                    ? "Edicion activa"
+                    : isPinnedVehicleMode
+                        ? "Vehiculo fijado"
+                        : selectedItem
+                            ? "Recorrido cargado"
+                            : "Vista general";
+
+            trackingSummaryVehicle.textContent = selectedVehicleId
+                ? getVehicleDisplayName(selectedVehicleId)
+                : "Todos";
+            trackingSummaryStatus.textContent = status;
+            trackingSummaryTrip.textContent = selectedItem
+                ? `Trip ${selectedItem.trip.id}`
+                : (selectedTripId != null ? `Trip ${selectedTripId}` : "Sin seleccion");
+
+        }
+
+        function switchView(viewName) {
+            if (viewName === "admin" && navAdminButton.classList.contains("hidden-control")) {
+                return;
+            }
+
+            currentView = viewName;
+            syncTopbarForView(viewName);
+            trackingView.classList.toggle("active", viewName === "tracking");
+            captureView.classList.toggle("active", viewName === "capture");
+            adminManagementSection.classList.toggle("active", viewName === "admin");
+            viewButtons.forEach((button) => {
+                if (!button) {
+                    return;
+                }
+                button.classList.toggle("active", button.dataset.viewTarget === viewName);
+            });
+            setSidebarContext(viewName);
+            updateTrackingSummaryBar();
+
+            if (isMobileLayout()) {
+                setSidebarOpen(false);
+            }
+
+            if (viewName === "tracking") {
+                window.setTimeout(() => {
+                    map.invalidateSize();
+                }, 120);
+            }
+        }
+
+        function setAdminTab(tabName) {
+            adminTabButtons.forEach((button) => {
+                button.classList.toggle("active", button.dataset.adminTab === tabName);
+            });
+            adminTabPanels.forEach((panel) => {
+                panel.classList.toggle("active", panel.id === `admin-tab-${tabName}`);
+            });
         }
 
         function userHasPermission(permissionName) {
@@ -1002,12 +2174,18 @@
             currentUser = user;
             const displayName = user.full_name || user.username;
             sessionUser.textContent = `${displayName} (${user.role})`;
+            if (topbarSessionUser) {
+                topbarSessionUser.textContent = displayName;
+            }
 
             if (userHasPermission("view_all_vehicles")) {
                 sessionScope.textContent = "Acceso a todos los vehiculos.";
             } else {
                 const vehicleCount = Array.isArray(user.vehicle_ids) ? user.vehicle_ids.length : 0;
                 sessionScope.textContent = `Vehiculos asignados: ${vehicleCount || "ninguno"}.`;
+            }
+            if (topbarSessionScope) {
+                topbarSessionScope.textContent = sessionScope.textContent;
             }
 
             const canEditTrips = userHasPermission("edit_trips");
@@ -1017,7 +2195,21 @@
 
             const canManageUsers = userHasPermission("manage_users");
             const canManageVehicles = userHasPermission("manage_vehicles");
-            adminManagementSection.classList.toggle("hidden-control", !(canManageUsers || canManageVehicles));
+            const canAccessAdmin = canManageUsers || canManageVehicles;
+            if (trackingUserFilterField) {
+                trackingUserFilterField.classList.toggle("hidden-control", !canManageUsers);
+            }
+            if (!canManageUsers && trackingUserSelect) {
+                trackingUserSelect.value = "";
+            }
+            adminManagementSection.classList.toggle("hidden-control", !canAccessAdmin);
+            navAdminButton.classList.toggle("hidden-control", !canAccessAdmin);
+
+            if (!canAccessAdmin && currentView === "admin") {
+                switchView("tracking");
+            }
+
+            updateTrackingSummaryBar();
         }
 
         function beginDataLoad() {
@@ -1123,6 +2315,60 @@
 
         function getTripCategoryColor(trip) {
             return getCategoryColor(getTripClassification(trip));
+        }
+
+        function getCategoryColorFromSelectValue(value, { supportsDefault = true } = {}) {
+            const normalizedValue = String(value || "").trim();
+            if (!normalizedValue) {
+                return "";
+            }
+
+            if (supportsDefault && normalizedValue === "default") {
+                return tripCategoryPalette.default.color;
+            }
+
+            return getCategoryColor(normalizedValue);
+        }
+
+        function styleCategorySelect(select, { supportsDefault = true } = {}) {
+            if (!select) {
+                return;
+            }
+
+            select.classList.add("category-select-control");
+
+            [...select.options].forEach((option) => {
+                const baseLabel = option.dataset.baseLabel || option.textContent.replace(/^●\s*/, "").trim();
+                option.dataset.baseLabel = baseLabel;
+
+                const color = getCategoryColorFromSelectValue(option.value, { supportsDefault });
+                if (color) {
+                    option.textContent = `● ${baseLabel}`;
+                    option.style.color = color;
+                    option.style.fontWeight = "600";
+                } else {
+                    option.textContent = baseLabel;
+                    option.style.color = "";
+                    option.style.fontWeight = "";
+                }
+            });
+
+            const selectedColor = getCategoryColorFromSelectValue(select.value, { supportsDefault });
+            select.style.setProperty("--category-select-color", selectedColor || "transparent");
+            select.classList.toggle("no-color", !selectedColor);
+        }
+
+        function hasActiveTrackingFilters() {
+            return Boolean(
+                trackingUserSelect.value
+                || vehicleSelect.value
+                || categoryFilterSelect.value
+                || activeDateFilterValues.start
+                || activeDateFilterValues.end
+                || tripSelect.value
+                || selectedTripId != null
+                || tripIdInput.value
+            );
         }
 
         function getTripLineStyle(trip, selected, dimmed) {
@@ -1451,6 +2697,92 @@
             return vehicleSelect.value;
         }
 
+        function canUseTrackingUserFilter() {
+            return userHasPermission("manage_users");
+        }
+
+        function getSelectedTrackingUserId() {
+            return trackingUserSelect ? trackingUserSelect.value : "";
+        }
+
+        function getTrackingUserById(userId) {
+            if (!userId) {
+                return null;
+            }
+
+            return adminUsersCache.find((user) => String(user.id) === String(userId)) || null;
+        }
+
+        function getSelectedTrackingUserVehicleIds() {
+            const selectedUserId = getSelectedTrackingUserId();
+            if (!selectedUserId) {
+                return null;
+            }
+
+            const selectedUser = getTrackingUserById(selectedUserId);
+            if (!selectedUser) {
+                return new Set();
+            }
+
+            if (selectedUser.role === "admin") {
+                return null;
+            }
+
+            return new Set(
+                (adminAssignmentsCache.get(String(selectedUserId)) || []).map((vehicleId) => String(vehicleId))
+            );
+        }
+
+        function vehicleMatchesSelectedTrackingUser(vehicleId) {
+            const allowedVehicleIds = getSelectedTrackingUserVehicleIds();
+            if (!allowedVehicleIds) {
+                return true;
+            }
+
+            return allowedVehicleIds.has(String(vehicleId));
+        }
+
+        function getTrackingVehicleOptionLabel(vehicle) {
+            if (!vehicle) {
+                return "";
+            }
+
+            const name = vehicle.nombre ? ` - ${vehicle.nombre}` : "";
+            const plate = vehicle.matricula ? ` (${vehicle.matricula})` : "";
+            return `Vehiculo ${vehicle.id}${name}${plate}`;
+        }
+
+        function renderTrackingUserSelect() {
+            if (!trackingUserFilterField || !trackingUserSelect) {
+                return;
+            }
+
+            const canFilterByUser = canUseTrackingUserFilter();
+            trackingUserFilterField.classList.toggle("hidden-control", !canFilterByUser);
+
+            if (!canFilterByUser) {
+                trackingUserSelect.innerHTML = '<option value="">Ver todos</option>';
+                trackingUserSelect.value = "";
+                return;
+            }
+
+            const selectedUserId = trackingUserSelect.value;
+            trackingUserSelect.innerHTML = '<option value="">Ver todos</option>';
+
+            adminUsersCache.forEach((user) => {
+                const option = document.createElement("option");
+                option.value = user.id;
+                option.textContent = `${user.full_name || user.username} (${user.username}, ${user.role})`;
+                trackingUserSelect.appendChild(option);
+            });
+
+            if (adminUsersCache.some((user) => String(user.id) === String(selectedUserId))) {
+                trackingUserSelect.value = selectedUserId;
+            } else {
+                trackingUserSelect.value = "";
+            }
+        }
+
         function getVehicleDisplayName(vehicleId, fallbackName = "") {
             const vehicle = allVehiclesCache.find((item) => String(item.id) === String(vehicleId));
             return fallbackName || (vehicle ? vehicle.nombre : `Vehiculo ${vehicleId}`);
@@ -1524,11 +2856,15 @@
 
         function getFilteredLiveVehiclePositions() {
             const selectedVehicleId = getSelectedVehicleId();
-            if (!selectedVehicleId) {
-                return liveVehiclePositions;
-            }
-
             return liveVehiclePositions.filter((position) => {
+                if (!vehicleMatchesSelectedTrackingUser(position.vehicle_id)) {
+                    return false;
+                }
+
+                if (!selectedVehicleId) {
+                    return true;
+                }
+
                 return String(position.vehicle_id) === String(selectedVehicleId);
             });
         }
@@ -1560,6 +2896,7 @@
         function setLiveTrackingStatus(text, isError = false) {
             liveTrackingStatus.textContent = text;
             liveTrackingStatus.classList.toggle("error", isError);
+            updateTrackingSummaryBar();
         }
 
         function updatePinnedVehiclePanel(position = getSelectedLiveVehiclePosition(), now = Date.now()) {
@@ -1630,6 +2967,7 @@
             bringLiveMarkersToFront();
             updateLiveTrackingControls();
             updatePinnedVehicleView();
+            updateTrackingSummaryBar();
         }
 
         function refreshLiveFreshnessVisuals() {
@@ -1698,6 +3036,7 @@
                 renderNormalSpeedDistanceChart();
             }
             updatePinnedVehicleView();
+            updateTrackingSummaryBar();
         }
 
         async function updatePinnedLiveChart({ force = false } = {}) {
@@ -1823,6 +3162,10 @@
             return String(getTripVehicleId(trip)) === String(selectedVehicleId);
         }
 
+        function tripMatchesTrackingUser(trip) {
+            return vehicleMatchesSelectedTrackingUser(getTripVehicleId(trip));
+        }
+
         function tripMatchesCategory(trip) {
             const selectedCategoryKey = getSelectedCategoryKey();
 
@@ -1854,6 +3197,67 @@
                 option.textContent = `VehÃ­culo ${selectedVehicleId}`;
                 vehicleSelect.appendChild(option);
                 vehicleSelect.value = selectedVehicleId;
+            } else {
+                vehicleSelect.value = "";
+            }
+        }
+
+        function populateVehicleSelect(trips) {
+            const selectedVehicleId = vehicleSelect.value;
+            const selectedUserId = getSelectedTrackingUserId();
+            const vehiclesById = new Map();
+
+            if (selectedUserId) {
+                allVehiclesCache.forEach((vehicle) => {
+                    if (vehicle && vehicle.id != null && vehicleMatchesSelectedTrackingUser(vehicle.id)) {
+                        vehiclesById.set(String(vehicle.id), vehicle);
+                    }
+                });
+
+                trips
+                    .map(getTripVehicleId)
+                    .filter((value) => value != null && value !== "" && vehicleMatchesSelectedTrackingUser(value))
+                    .forEach((vehicleId) => {
+                        const key = String(vehicleId);
+                        if (!vehiclesById.has(key)) {
+                            vehiclesById.set(key, { id: vehicleId });
+                        }
+                    });
+            } else {
+                trips
+                    .map(getTripVehicleId)
+                    .filter((value) => value != null && value !== "")
+                    .forEach((vehicleId) => {
+                        const key = String(vehicleId);
+                        if (!vehiclesById.has(key)) {
+                            const matchingVehicle = allVehiclesCache.find((vehicle) => String(vehicle.id) === key);
+                            vehiclesById.set(key, matchingVehicle || { id: vehicleId });
+                        }
+                    });
+            }
+
+            const vehiclesList = [...vehiclesById.values()]
+                .sort((a, b) => String(a.id).localeCompare(String(b.id), "es", { numeric: true }));
+
+            vehicleSelect.innerHTML = '<option value="">Ver todos</option>';
+            vehiclesList.forEach((vehicle) => {
+                const option = document.createElement("option");
+                option.value = vehicle.id;
+                option.textContent = getTrackingVehicleOptionLabel(vehicle);
+                vehicleSelect.appendChild(option);
+            });
+
+            if (vehiclesList.some((vehicle) => String(vehicle.id) === String(selectedVehicleId))) {
+                vehicleSelect.value = selectedVehicleId;
+            } else if (selectedVehicleId && !selectedUserId) {
+                const fallbackVehicle = allVehiclesCache.find((vehicle) => String(vehicle.id) === String(selectedVehicleId)) || { id: selectedVehicleId };
+                const option = document.createElement("option");
+                option.value = fallbackVehicle.id;
+                option.textContent = getTrackingVehicleOptionLabel(fallbackVehicle);
+                vehicleSelect.appendChild(option);
+                vehicleSelect.value = selectedVehicleId;
+            } else if (selectedVehicleId) {
+                vehicleSelect.value = "";
             } else {
                 vehicleSelect.value = "";
             }
@@ -1895,6 +3299,9 @@
                 manualVehicleSelect.value = selectedVehicleId;
             }
         }
+
+        styleCategorySelect(categoryFilterSelect, { supportsDefault: true });
+        styleCategorySelect(manualCategorySelect, { supportsDefault: false });
 
         function renderTripsList() {
             const selectedValue = selectedTripId == null ? "" : String(selectedTripId);
@@ -2034,6 +3441,7 @@
             }
 
             setMessage(`Recorrido seleccionado: ${tripId}.`);
+            updateTrackingSummaryBar();
         }
 
         function clearSelectedTrip({ showMessage = true, fitMap = false } = {}) {
@@ -2052,6 +3460,7 @@
             if (showMessage) {
                 setMessage("Vista general de recorridos.");
             }
+            updateTrackingSummaryBar();
         }
 
         function redrawCurrentMap() {
@@ -2062,9 +3471,60 @@
             }
         }
 
-        function getFilterRange() {
-            const start = filterStartInput.value ? new Date(filterStartInput.value) : null;
-            const end = filterEndInput.value ? new Date(filterEndInput.value) : null;
+        function getDateFilterDraftValues() {
+            return {
+                start: filterStartInput.value || "",
+                end: filterEndInput.value || ""
+            };
+        }
+
+        function hasPendingDateFilterChanges() {
+            const draft = getDateFilterDraftValues();
+            return draft.start !== activeDateFilterValues.start || draft.end !== activeDateFilterValues.end;
+        }
+
+        function setActiveDateFilterValues(values, { syncInputs = false } = {}) {
+            activeDateFilterValues = {
+                start: values?.start || "",
+                end: values?.end || ""
+            };
+
+            if (syncInputs) {
+                filterStartInput.value = activeDateFilterValues.start;
+                filterEndInput.value = activeDateFilterValues.end;
+            }
+
+            updateDateFilterUi();
+        }
+
+        function restoreDraftDateFilters() {
+            filterStartInput.value = activeDateFilterValues.start;
+            filterEndInput.value = activeDateFilterValues.end;
+            updateDateFilterUi();
+        }
+
+        function updateDateFilterUi() {
+            const hasPendingChanges = hasPendingDateFilterChanges();
+            dateFilterSection.classList.toggle("pending", hasPendingChanges);
+            dateFilterActions.classList.toggle("visible", hasPendingChanges);
+            applyDateFilterButton.disabled = !hasPendingChanges;
+            cancelDateFilterButton.disabled = !hasPendingChanges;
+
+            if (!hasPendingChanges) {
+                dateFilterStatus.textContent = activeDateFilterValues.start || activeDateFilterValues.end
+                    ? "Rango de fechas aplicado."
+                    : "Sin cambios pendientes en fechas.";
+                dateFilterStatus.classList.remove("pending");
+                return;
+            }
+
+            dateFilterStatus.textContent = "Hay cambios de fechas sin aplicar.";
+            dateFilterStatus.classList.add("pending");
+        }
+
+        function parseDateFilterRange(values) {
+            const start = values.start ? new Date(values.start) : null;
+            const end = values.end ? new Date(values.end) : null;
 
             if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) {
                 throw new Error("invalid-filter");
@@ -2075,6 +3535,10 @@
             }
 
             return { start, end };
+        }
+
+        function getFilterRange() {
+            return parseDateFilterRange(activeDateFilterValues);
         }
 
         function tripMatchesFilter(trip, range) {
@@ -2098,6 +3562,7 @@
 
         function tripMatchesActiveFilters(trip, range) {
             return tripMatchesFilter(trip, range)
+                && tripMatchesTrackingUser(trip)
                 && tripMatchesVehicle(trip)
                 && tripMatchesCategory(trip);
         }
@@ -2163,6 +3628,7 @@
             if (!form) {
                 return;
             }
+            styleCategorySelect(document.getElementById("trip-category-select"), { supportsDefault: false });
             if (form.dataset.submitBound === "true") {
                 return;
             }
@@ -2255,6 +3721,7 @@
             if (select.value !== categoryValue) {
                 select.value = categoryValue;
             }
+            styleCategorySelect(select, { supportsDefault: false });
 
             select.disabled = isSavingCurrentTrip;
             const saveButton = form.querySelector('[data-category-action="save"]');
@@ -2772,7 +4239,11 @@
             renderDeleteVehicleSelect();
             renderAccessVehicleSelect();
             renderAccessList();
+            renderTrackingUserSelect();
             populateManualVehicleSelect(allVehiclesCache, allTripsCache);
+            populateVehicleSelect(allTripsCache);
+            renderLiveVehiclePositions();
+            updateTrackingSummaryBar();
 
             if (showMessage) {
                 setAdminMessage("Administracion actualizada.");
@@ -3189,6 +4660,7 @@
                 option.selected = category === selectedCategory;
                 select.appendChild(option);
             });
+            styleCategorySelect(select, { supportsDefault: false });
 
             const actions = document.createElement("div");
             actions.className = "trip-category-edit-actions";
@@ -3583,6 +5055,7 @@
             setManualDrawStatus();
             setManualDrawControlsState();
             updateAutoRefreshStatus(getAutoRefreshPauseReason());
+            updateTrackingSummaryBar();
         }
 
         function clearManualDrawLayer() {
@@ -3735,8 +5208,7 @@
 
                 vehicleSelect.value = "";
                 categoryFilterSelect.value = "";
-                filterStartInput.value = "";
-                filterEndInput.value = "";
+                setActiveDateFilterValues({ start: "", end: "" }, { syncInputs: true });
                 selectedTripId = newTripId;
                 tripIdInput.value = newTripId;
                 currentMode = "all";
@@ -3890,7 +5362,8 @@
 
             if (showMessages) {
                 loadAllButton.disabled = true;
-                applyFilterButton.disabled = true;
+                applyDateFilterButton.disabled = true;
+                cancelDateFilterButton.disabled = true;
                 clearFilterButton.disabled = true;
                 setMessage("Cargando recorridos...");
             }
@@ -3949,7 +5422,7 @@
                 if (showMessages) {
                     const totalTrips = filteredTrips.length;
                     const totalPoints = currentPoints.length;
-                    const filterText = filterStartInput.value || filterEndInput.value ? " con filtro aplicado" : "";
+                    const filterText = activeDateFilterValues.start || activeDateFilterValues.end ? " con filtro aplicado" : "";
                     setMessage(`Recorridos cargados${filterText}: ${totalTrips}. Puntos: ${totalPoints}.`);
                 }
             } catch (error) {
@@ -3983,7 +5456,8 @@
             } finally {
                 if (showMessages && !isStaleDataLoad(loadVersion)) {
                     loadAllButton.disabled = false;
-                    applyFilterButton.disabled = false;
+                    applyDateFilterButton.disabled = !hasPendingDateFilterChanges();
+                    cancelDateFilterButton.disabled = !hasPendingDateFilterChanges();
                     clearFilterButton.disabled = false;
                 }
             }
@@ -4128,15 +5602,43 @@
             await loadAllTrips();
         });
 
-        applyFilterButton.addEventListener("click", () => {
-            loadAllTrips();
+        filterStartInput.addEventListener("input", () => {
+            updateDateFilterUi();
+        });
+
+        filterEndInput.addEventListener("input", () => {
+            updateDateFilterUi();
+        });
+
+        applyDateFilterButton.addEventListener("click", async () => {
+            const nextValues = getDateFilterDraftValues();
+
+            try {
+                parseDateFilterRange(nextValues);
+                setActiveDateFilterValues(nextValues);
+                await loadAllTrips();
+            } catch (error) {
+                if (error.message === "inverted-filter") {
+                    setMessage("El inicio del filtro no puede ser posterior al fin.", true);
+                } else if (error.message === "invalid-filter") {
+                    setMessage("El rango de fecha/hora no es valido.", true);
+                } else {
+                    setMessage(`No se pudieron aplicar las fechas: ${error.message}`, true);
+                }
+            }
+        });
+
+        cancelDateFilterButton.addEventListener("click", () => {
+            restoreDraftDateFilters();
+            setMessage("Cambios de fechas cancelados.");
         });
 
         clearFilterButton.addEventListener("click", () => {
+            trackingUserSelect.value = "";
             vehicleSelect.value = "";
             categoryFilterSelect.value = "";
-            filterStartInput.value = "";
-            filterEndInput.value = "";
+            styleCategorySelect(categoryFilterSelect, { supportsDefault: true });
+            setActiveDateFilterValues({ start: "", end: "" }, { syncInputs: true });
             tripSelect.value = "";
             selectedTripId = null;
             isCategoryEditMode = false;
@@ -4144,12 +5646,12 @@
             setSplitMode(false);
             tripIdInput.value = "";
             renderLiveVehiclePositions();
+            updateTrackingSummaryBar();
             loadAllTrips();
         });
 
         loadAllButton.addEventListener("click", () => {
-            filterStartInput.value = "";
-            filterEndInput.value = "";
+            setActiveDateFilterValues({ start: "", end: "" }, { syncInputs: true });
             loadAllTrips();
         });
 
@@ -4178,6 +5680,7 @@
         });
 
         manualCategorySelect.addEventListener("change", () => {
+            styleCategorySelect(manualCategorySelect, { supportsDefault: false });
             renderManualDrawDraft();
         });
 
@@ -4197,6 +5700,18 @@
         centerRouteButton.addEventListener("click", () => {
             centerRoute();
         });
+
+        if (clearTripSelectionButton) {
+            clearTripSelectionButton.addEventListener("click", () => {
+                clearSelectedTrip({ showMessage: true, fitMap: true });
+            });
+        }
+
+        if (trackingSummaryCenterButton) {
+            trackingSummaryCenterButton.addEventListener("click", () => {
+                centerRoute();
+            });
+        }
 
         splitTripButton.addEventListener("click", () => {
             if (isSplittingTrip) {
@@ -4247,6 +5762,38 @@
             setMessage(`Vehiculo fijado: ${getVehicleDisplayName(position.vehicle_id, position.vehicle_name)}.`);
         });
 
+        viewButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                switchView(button.dataset.viewTarget);
+            });
+        });
+
+        accordionButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                const name = button.dataset.accordionTarget;
+                const item = accordionItems.find((entry) => entry.dataset.accordionItem === name);
+                setAccordionOpen(name, !item?.classList.contains("open"));
+            });
+        });
+
+        if (sidebarToggleButton) {
+            sidebarToggleButton.addEventListener("click", () => {
+                toggleSidebar();
+            });
+        }
+
+        if (sidebarBackdrop) {
+            sidebarBackdrop.addEventListener("click", () => {
+                setSidebarOpen(false);
+            });
+        }
+
+        adminTabButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                setAdminTab(button.dataset.adminTab);
+            });
+        });
+
         vehicleSelect.addEventListener("change", () => {
             selectedTripId = null;
             isCategoryEditMode = false;
@@ -4255,21 +5802,45 @@
             tripIdInput.value = "";
             tripSelect.value = "";
             renderLiveVehiclePositions();
+            updateTrackingSummaryBar();
+            loadAllTrips();
+            loadLiveVehiclePositions({ showErrors: true });
+        });
+
+        trackingUserSelect.addEventListener("change", () => {
+            const selectedVehicleId = vehicleSelect.value;
+            if (selectedVehicleId && !vehicleMatchesSelectedTrackingUser(selectedVehicleId)) {
+                vehicleSelect.value = "";
+            }
+
+            selectedTripId = null;
+            isCategoryEditMode = false;
+            categoryEditTripId = null;
+            setSplitMode(false);
+            tripIdInput.value = "";
+            tripSelect.value = "";
+            populateVehicleSelect(allTripsCache);
+            renderLiveVehiclePositions();
+            updateTrackingSummaryBar();
             loadAllTrips();
             loadLiveVehiclePositions({ showErrors: true });
         });
 
         categoryFilterSelect.addEventListener("change", () => {
+            styleCategorySelect(categoryFilterSelect, { supportsDefault: true });
+            updateTrackingSummaryBar();
             loadAllTrips();
         });
 
         tripSelect.addEventListener("change", () => {
             if (!tripSelect.value) {
+                updateTrackingSummaryBar();
                 clearSelectedTrip({ fitMap: true });
                 return;
             }
 
             setSplitMode(false);
+            updateTrackingSummaryBar();
             selectTrip(tripSelect.value, false);
         });
 
@@ -4365,6 +5936,12 @@
                 adminAssignmentsCache.set(String(userId), assignment.vehicle_ids || []);
                 renderAccessVehicleSelect();
                 renderAccessList();
+                renderTrackingUserSelect();
+                populateVehicleSelect(allTripsCache);
+                renderLiveVehiclePositions();
+                updateTrackingSummaryBar();
+                loadAllTrips();
+                loadLiveVehiclePositions({ showErrors: true });
                 setAdminMessage("Accesos guardados.");
             } catch (error) {
                 setAdminMessage(`No se pudieron guardar los accesos: ${error.message}`, true);
@@ -4496,8 +6073,65 @@
             updateAutoRefreshStatus(getAutoRefreshPauseReason());
         });
 
+        if (mapChartDivider && mapContent) {
+            mapChartDivider.addEventListener("pointerdown", (event) => {
+                if (event.button !== 0) {
+                    return;
+                }
+                isResizingMapChart = true;
+                resizeDragState = {
+                    startY: event.clientY,
+                    startChartHeight: parseFloat(getComputedStyle(mapContent).getPropertyValue("--chart-panel-height")) || CHART_MIN_HEIGHT,
+                    pointerId: event.pointerId,
+                };
+                mapContent.classList.add("is-resizing");
+                document.body.style.cursor = "row-resize";
+                document.body.style.userSelect = "none";
+                if (mapChartDivider.setPointerCapture) {
+                    mapChartDivider.setPointerCapture(event.pointerId);
+                }
+                event.preventDefault();
+            });
+
+            mapChartDivider.addEventListener("pointermove", (event) => {
+                handleMapChartResize(event.clientY);
+            });
+
+            ["pointerup", "pointercancel", "lostpointercapture"].forEach((eventName) => {
+                mapChartDivider.addEventListener(eventName, () => {
+                    stopMapChartResize();
+                });
+            });
+
+            mapChartDivider.addEventListener("keydown", (event) => {
+                if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setChartPanelHeight((parseFloat(getComputedStyle(mapContent).getPropertyValue("--chart-panel-height")) || CHART_MIN_HEIGHT) + 24);
+                }
+                if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setChartPanelHeight((parseFloat(getComputedStyle(mapContent).getPropertyValue("--chart-panel-height")) || CHART_MIN_HEIGHT) - 24);
+                }
+            });
+
+            syncTrackingSplitLayout();
+        }
+
+        syncTopbarForView(currentView);
+
         logoutButton.addEventListener("click", () => {
             auth.logout();
+        });
+
+        window.addEventListener("resize", () => {
+            syncSidebarBackdrop();
+            syncTrackingSplitLayout();
+        });
+
+        window.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && isSidebarOpen) {
+                setSidebarOpen(false);
+            }
         });
 
         async function bootstrapAuthenticatedMap() {
@@ -4506,10 +6140,17 @@
                 return;
             }
 
+            setAccordionOpen("selection", true);
+            setAccordionOpen("management", true);
+            setAccordionOpen("design", false);
+            setSidebarOpen(false);
+            setSidebarContext(currentView);
+            setAdminTab("users");
             applyUserContext(user);
             renderCategoryLegend();
             updateManualDrawUi();
             updateLiveTrackingControls();
+            updateTrackingSummaryBar();
             startLivePositionsRefresh();
             loadAllTrips();
             loadLiveVehiclePositions({ showErrors: true });

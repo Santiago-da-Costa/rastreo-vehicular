@@ -22,8 +22,35 @@
             padding: 20px;
         }
 
-        h1 {
+        .page-header {
+            display: grid;
+            gap: 12px;
             margin: 0 0 18px;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            width: fit-content;
+            padding: 10px 14px;
+            border: 1px solid #c5ccd3;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #1f2933;
+            font-size: 15px;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .back-link:hover,
+        .back-link:focus-visible {
+            background: #eaf1f5;
+            outline: none;
+        }
+
+        h1 {
+            margin: 0;
             font-size: 28px;
             line-height: 1.2;
         }
@@ -160,7 +187,10 @@
 </head>
 <body>
     <main>
-        <h1>Seguimiento en vivo</h1>
+        <header class="page-header">
+            <a class="back-link" href="trip_map.html" aria-label="Volver al panel principal">&larr; Volver al panel principal</a>
+            <h1>Seguimiento en vivo</h1>
+        </header>
         <div class="session-bar" aria-live="polite">
             <span>Sesion: <span class="session-user" id="session-user">Cargando...</span></span>
             <button id="logout-button" type="button">Salir</button>

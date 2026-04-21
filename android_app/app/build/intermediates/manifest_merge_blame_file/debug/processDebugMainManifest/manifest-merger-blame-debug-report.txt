@@ -1,0 +1,166 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.rastreo.vehicular"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="34" />
+10
+11    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+11-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:4:5-81
+11-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:4:22-78
+12    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+12-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:5:5-79
+12-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:5:22-76
+13    <uses-permission android:name="android.permission.INTERNET" />
+13-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:6:5-67
+13-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:6:22-64
+14
+15    <permission
+15-->[androidx.core:core:1.13.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\8c97d544f9fbff002fa0e9b4e2fe7242\transformed\core-1.13.1\AndroidManifest.xml:22:5-24:47
+16        android:name="com.rastreo.vehicular.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+16-->[androidx.core:core:1.13.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\8c97d544f9fbff002fa0e9b4e2fe7242\transformed\core-1.13.1\AndroidManifest.xml:23:9-81
+17        android:protectionLevel="signature" />
+17-->[androidx.core:core:1.13.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\8c97d544f9fbff002fa0e9b4e2fe7242\transformed\core-1.13.1\AndroidManifest.xml:24:9-44
+18
+19    <uses-permission android:name="com.rastreo.vehicular.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+19-->[androidx.core:core:1.13.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\8c97d544f9fbff002fa0e9b4e2fe7242\transformed\core-1.13.1\AndroidManifest.xml:26:5-97
+19-->[androidx.core:core:1.13.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\8c97d544f9fbff002fa0e9b4e2fe7242\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
+20
+21    <application
+21-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:8:5-25:19
+22        android:allowBackup="true"
+22-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:9:9-35
+23        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+23-->[androidx.core:core:1.13.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\8c97d544f9fbff002fa0e9b4e2fe7242\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
+24        android:debuggable="true"
+25        android:extractNativeLibs="false"
+26        android:icon="@android:drawable/ic_menu_mylocation"
+26-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:10:9-60
+27        android:label="Rastreo Vehicular"
+27-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:11:9-42
+28        android:roundIcon="@android:drawable/ic_menu_mylocation"
+28-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:12:9-65
+29        android:supportsRtl="true"
+29-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:13:9-35
+30        android:testOnly="true"
+31        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+31-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:14:9-72
+32        android:usesCleartextTraffic="true" >
+32-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:15:9-44
+33        <activity
+33-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:16:9-24:20
+34            android:name="com.rastreo.vehicular.MainActivity"
+34-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:17:13-41
+35            android:exported="true" >
+35-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:18:13-36
+36            <intent-filter>
+36-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:19:13-23:29
+37                <action android:name="android.intent.action.MAIN" />
+37-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:20:17-69
+37-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:20:25-66
+38
+39                <category android:name="android.intent.category.LAUNCHER" />
+39-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:22:17-77
+39-->C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\android_app\app\src\main\AndroidManifest.xml:22:27-74
+40            </intent-filter>
+41        </activity>
+42        <activity
+42-->[com.google.android.gms:play-services-base:18.5.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\133b23cd698adcc2ba602df93b3302e6\transformed\play-services-base-18.5.0\AndroidManifest.xml:5:9-173
+43            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+43-->[com.google.android.gms:play-services-base:18.5.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\133b23cd698adcc2ba602df93b3302e6\transformed\play-services-base-18.5.0\AndroidManifest.xml:5:19-85
+44            android:exported="false"
+44-->[com.google.android.gms:play-services-base:18.5.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\133b23cd698adcc2ba602df93b3302e6\transformed\play-services-base-18.5.0\AndroidManifest.xml:5:146-170
+45            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+45-->[com.google.android.gms:play-services-base:18.5.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\133b23cd698adcc2ba602df93b3302e6\transformed\play-services-base-18.5.0\AndroidManifest.xml:5:86-145
+46
+47        <meta-data
+47-->[com.google.android.gms:play-services-basement:18.4.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\58e1bd97d0ebaf5eb9d4b924f31028a3\transformed\play-services-basement-18.4.0\AndroidManifest.xml:6:9-122
+48            android:name="com.google.android.gms.version"
+48-->[com.google.android.gms:play-services-basement:18.4.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\58e1bd97d0ebaf5eb9d4b924f31028a3\transformed\play-services-basement-18.4.0\AndroidManifest.xml:6:20-65
+49            android:value="@integer/google_play_services_version" />
+49-->[com.google.android.gms:play-services-basement:18.4.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\58e1bd97d0ebaf5eb9d4b924f31028a3\transformed\play-services-basement-18.4.0\AndroidManifest.xml:6:66-119
+50
+51        <activity
+51-->[androidx.compose.ui:ui-tooling-android:1.6.8] C:\Users\Asus\.gradle\caches\9.0.0\transforms\ea6ddb6e12b4db27749d964de3b7be0b\transformed\ui-tooling-release\AndroidManifest.xml:23:9-25:39
+52            android:name="androidx.compose.ui.tooling.PreviewActivity"
+52-->[androidx.compose.ui:ui-tooling-android:1.6.8] C:\Users\Asus\.gradle\caches\9.0.0\transforms\ea6ddb6e12b4db27749d964de3b7be0b\transformed\ui-tooling-release\AndroidManifest.xml:24:13-71
+53            android:exported="true" />
+53-->[androidx.compose.ui:ui-tooling-android:1.6.8] C:\Users\Asus\.gradle\caches\9.0.0\transforms\ea6ddb6e12b4db27749d964de3b7be0b\transformed\ui-tooling-release\AndroidManifest.xml:25:13-36
+54        <activity
+54-->[androidx.compose.ui:ui-test-manifest:1.6.8] C:\Users\Asus\.gradle\caches\9.0.0\transforms\0800c9e1c9826a69f4796ef6a439cd28\transformed\ui-test-manifest-1.6.8\AndroidManifest.xml:23:9-25:39
+55            android:name="androidx.activity.ComponentActivity"
+55-->[androidx.compose.ui:ui-test-manifest:1.6.8] C:\Users\Asus\.gradle\caches\9.0.0\transforms\0800c9e1c9826a69f4796ef6a439cd28\transformed\ui-test-manifest-1.6.8\AndroidManifest.xml:24:13-63
+56            android:exported="true" />
+56-->[androidx.compose.ui:ui-test-manifest:1.6.8] C:\Users\Asus\.gradle\caches\9.0.0\transforms\0800c9e1c9826a69f4796ef6a439cd28\transformed\ui-test-manifest-1.6.8\AndroidManifest.xml:25:13-36
+57
+58        <provider
+58-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\dfa171bec22766d39f10cb7aee7862e7\transformed\emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+59            android:name="androidx.startup.InitializationProvider"
+59-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\dfa171bec22766d39f10cb7aee7862e7\transformed\emoji2-1.3.0\AndroidManifest.xml:25:13-67
+60            android:authorities="com.rastreo.vehicular.androidx-startup"
+60-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\dfa171bec22766d39f10cb7aee7862e7\transformed\emoji2-1.3.0\AndroidManifest.xml:26:13-68
+61            android:exported="false" >
+61-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\dfa171bec22766d39f10cb7aee7862e7\transformed\emoji2-1.3.0\AndroidManifest.xml:27:13-37
+62            <meta-data
+62-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\dfa171bec22766d39f10cb7aee7862e7\transformed\emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+63                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+63-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\dfa171bec22766d39f10cb7aee7862e7\transformed\emoji2-1.3.0\AndroidManifest.xml:30:17-75
+64                android:value="androidx.startup" />
+64-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Asus\.gradle\caches\9.0.0\transforms\dfa171bec22766d39f10cb7aee7862e7\transformed\emoji2-1.3.0\AndroidManifest.xml:31:17-49
+65            <meta-data
+65-->[androidx.lifecycle:lifecycle-process:2.8.3] C:\Users\Asus\.gradle\caches\9.0.0\transforms\ad3b8402b9481964b95e6fd990aecdf1\transformed\lifecycle-process-2.8.3\AndroidManifest.xml:29:13-31:52
+66                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+66-->[androidx.lifecycle:lifecycle-process:2.8.3] C:\Users\Asus\.gradle\caches\9.0.0\transforms\ad3b8402b9481964b95e6fd990aecdf1\transformed\lifecycle-process-2.8.3\AndroidManifest.xml:30:17-78
+67                android:value="androidx.startup" />
+67-->[androidx.lifecycle:lifecycle-process:2.8.3] C:\Users\Asus\.gradle\caches\9.0.0\transforms\ad3b8402b9481964b95e6fd990aecdf1\transformed\lifecycle-process-2.8.3\AndroidManifest.xml:31:17-49
+68            <meta-data
+68-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:29:13-31:52
+69                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+69-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:30:17-85
+70                android:value="androidx.startup" />
+70-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:31:17-49
+71        </provider>
+72
+73        <receiver
+73-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:34:9-52:20
+74            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+74-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:35:13-76
+75            android:directBootAware="false"
+75-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:36:13-44
+76            android:enabled="true"
+76-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:37:13-35
+77            android:exported="true"
+77-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:38:13-36
+78            android:permission="android.permission.DUMP" >
+78-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:39:13-57
+79            <intent-filter>
+79-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:40:13-42:29
+80                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+80-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:41:17-91
+80-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:41:25-88
+81            </intent-filter>
+82            <intent-filter>
+82-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:43:13-45:29
+83                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+83-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:44:17-85
+83-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:44:25-82
+84            </intent-filter>
+85            <intent-filter>
+85-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:46:13-48:29
+86                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+86-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:47:17-88
+86-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:47:25-85
+87            </intent-filter>
+88            <intent-filter>
+88-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:49:13-51:29
+89                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+89-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:50:17-95
+89-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Asus\.gradle\caches\9.0.0\transforms\b364fa3aa3f9640cd3eaf4c8eade1c52\transformed\profileinstaller-1.3.1\AndroidManifest.xml:50:25-92
+90            </intent-filter>
+91        </receiver>
+92    </application>
+93
+94</manifest>

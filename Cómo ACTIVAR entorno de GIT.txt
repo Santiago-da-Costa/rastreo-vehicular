@@ -37,7 +37,7 @@ y dar enter
 Respaldar cambios en GIT:
 
 git add .
-git commit -m "Pronto el sistema de usuario y contraseña"
+git commit -m "Pronto el sistema multiusuario y vehículos"
 
 
 Activar túnel en Ngrok:
@@ -82,7 +82,7 @@ http://localhost:5500/login.html
 Para revisar backend/API
 https://rastreo-vehicular.onrender.com/docs
 
-
+teclado en pantalla
 
 Contraseña de Supabase:
 
@@ -104,6 +104,19 @@ Usuario y contraseña
 admin
 
 Admin_2026_RV_secure
+
+allow pasting
+
+
+ACCESO LOCAL PARA CELULAR:
+
+Para el panel principal: http://10.145.37.128:5500/trip_map.html
+
+Para captura (lo que te interesa ahora): http://10.145.37.128:5500/live_tracking.html
+
+
+
+
 
 
 
