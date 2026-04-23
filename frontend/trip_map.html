@@ -1055,6 +1055,42 @@
             color: #b42318;
         }
 
+        .live-state-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 8px;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            line-height: 1.2;
+        }
+
+        .live-state-badge.moving {
+            color: #166534;
+            background: #dcfce7;
+            border-color: #86efac;
+        }
+
+        .live-state-badge.stopped {
+            color: #991b1b;
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+
+        .live-state-badge.offline {
+            color: #475569;
+            background: #e2e8f0;
+            border-color: #cbd5e1;
+        }
+
+        .live-state-badge.unknown {
+            color: #92400e;
+            background: #fef3c7;
+            border-color: #fcd34d;
+        }
+
         .live-vehicle-label {
             color: #0f172a;
             font-size: 11px;
@@ -1987,6 +2023,36 @@
                 fillOpacity: 0.76
             }
         };
+        const liveStateVisualStyles = {
+            moving: {
+                label: "En movimiento",
+                color: "#166534",
+                fillColor: "#22c55e",
+                fillOpacity: 0.96,
+                badgeClass: "moving"
+            },
+            stopped: {
+                label: "Detenido",
+                color: "#7f1d1d",
+                fillColor: "#ef4444",
+                fillOpacity: 0.94,
+                badgeClass: "stopped"
+            },
+            offline: {
+                label: "Sin conexión",
+                color: "#475569",
+                fillColor: "#94a3b8",
+                fillOpacity: 0.82,
+                badgeClass: "offline"
+            },
+            unknown: {
+                label: "Desconocido",
+                color: "#92400e",
+                fillColor: "#f59e0b",
+                fillOpacity: 0.88,
+                badgeClass: "unknown"
+            }
+        };
         const viewMetadata = {
             tracking: {
                 title: "Seguimiento",
@@ -2561,6 +2627,22 @@
             };
         }
 
+        function normalizeLiveBusinessStateKey(rawState) {
+            switch (String(rawState || "").trim().toLowerCase()) {
+                case "en movimiento":
+                    return "moving";
+                case "detenido":
+                    return "stopped";
+                case "sin conexión":
+                case "sin conexion":
+                    return "offline";
+                case "desconocido":
+                    return "unknown";
+                default:
+                    return null;
+            }
+        }
+
         function getLivePositionTimestampMillis(position) {
             if (!position || !position.timestamp) {
                 return null;
@@ -2626,13 +2708,13 @@
 
         function getLiveMarkerStyle(position, now = Date.now()) {
             const freshness = getLivePositionFreshness(position, now);
-            const freshnessStyle = liveFreshnessStyles[freshness] || liveFreshnessStyles.unknown;
+            const stateStyle = getLiveBusinessStateStyle(position, now);
 
             return {
                 radius: freshness === "old" ? 10 : 11,
-                color: freshnessStyle.color,
-                fillColor: freshnessStyle.fillColor,
-                fillOpacity: freshnessStyle.fillOpacity,
+                color: stateStyle.color,
+                fillColor: stateStyle.fillColor,
+                fillOpacity: stateStyle.fillOpacity,
                 opacity: 1,
                 weight: 4,
                 pane: livePaneName
@@ -2643,6 +2725,36 @@
             const freshness = getLivePositionFreshness(position, now);
             const freshnessStyle = liveFreshnessStyles[freshness] || liveFreshnessStyles.unknown;
             return freshnessStyle.label;
+        }
+
+        function getLiveBusinessStateKey(position, now = Date.now()) {
+            const explicitState = normalizeLiveBusinessStateKey(position ? position.estado_en_vivo : null);
+            if (explicitState) {
+                return explicitState;
+            }
+
+            const freshness = getLivePositionFreshness(position, now);
+            if (freshness === "old") {
+                return "offline";
+            }
+            if (freshness === "unknown" || (position && position.is_active === false)) {
+                return "unknown";
+            }
+            return "moving";
+        }
+
+        function getLiveBusinessStateStyle(position, now = Date.now()) {
+            const stateKey = getLiveBusinessStateKey(position, now);
+            return liveStateVisualStyles[stateKey] || liveStateVisualStyles.unknown;
+        }
+
+        function getLiveBusinessStateLabel(position, now = Date.now()) {
+            return getLiveBusinessStateStyle(position, now).label;
+        }
+
+        function buildLiveStateBadge(position, now = Date.now()) {
+            const stateStyle = getLiveBusinessStateStyle(position, now);
+            return `<span class="live-state-badge ${escapeHtml(stateStyle.badgeClass)}">${escapeHtml(stateStyle.label)}</span>`;
         }
 
         function getTripStartTime(trip) {
@@ -2884,11 +2996,12 @@
             const freshnessLabel = getLiveFreshnessLabel(position, now);
             return [
                 `<strong>${escapeHtml(getVehicleDisplayName(position.vehicle_id, position.vehicle_name))}</strong>`,
+                `Estado en vivo: ${buildLiveStateBadge(position, now)}`,
                 `Trip activo: ${escapeHtml(position.trip_id)}`,
                 `Categoria: ${escapeHtml(position.categoria || unknownTripCategory)}`,
                 `Velocidad: ${escapeHtml(formatSpeedMetersPerSecond(position.speed))}`,
                 `Actualizado: ${escapeHtml(formatLiveAge(position, now))}`,
-                `Estado: ${escapeHtml(freshnessLabel)}`,
+                `Frescura: ${escapeHtml(freshnessLabel)}`,
                 `Fecha: ${escapeHtml(formatDateTime(position.timestamp))}`
             ].join("<br>");
         }
@@ -2910,6 +3023,10 @@
             const freshnessLabel = getLiveFreshnessLabel(position, now);
             pinnedVehiclePanel.innerHTML = [
                 `<p class="pinned-vehicle-title">${escapeHtml(vehicleName)}</p>`,
+                '<div class="pinned-vehicle-row">',
+                '<span class="pinned-vehicle-label">Estado</span>',
+                `<span>${buildLiveStateBadge(position, now)}</span>`,
+                '</div>',
                 '<div class="pinned-vehicle-row">',
                 '<span class="pinned-vehicle-label">Velocidad</span>',
                 `<span>${escapeHtml(formatSpeedMetersPerSecond(position.speed))}</span>`,
@@ -3012,6 +3129,7 @@
             if (selectedPosition) {
                 setLiveTrackingStatus(
                     `Posicion actual disponible para ${getVehicleDisplayName(selectedVehicleId, selectedPosition.vehicle_name)}. ` +
+                    `Estado ${getLiveBusinessStateLabel(selectedPosition, now)}. ` +
                     `Actualizado ${formatLiveAge(selectedPosition, now)} (${getLiveFreshnessLabel(selectedPosition, now)}).`
                 );
             } else {
