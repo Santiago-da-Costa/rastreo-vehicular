@@ -24,7 +24,7 @@ router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 logger = logging.getLogger(__name__)
 
 LIVE_STATE_POINTS_LIMIT = 5
-LIVE_STATE_OFFLINE_THRESHOLD = timedelta(minutes=5)
+LIVE_STATE_OFFLINE_THRESHOLD = timedelta(minutes=3)
 LIVE_STATE_STOPPED_MIN_DURATION = timedelta(seconds=120)
 LIVE_STATE_ACCURACY_FALLBACK_METERS = 50.0
 LIVE_STATE_MIN_RADIUS_METERS = 10.0
@@ -64,6 +64,17 @@ def _distance_meters(
     return earth_radius_meters * haversine_c
 
 
+def _get_stop_radius_meters(point: TripPoint) -> float:
+    accuracy = point.accuracy
+    if accuracy is None or accuracy <= 0:
+        accuracy = LIVE_STATE_ACCURACY_FALLBACK_METERS
+
+    return max(
+        LIVE_STATE_MIN_RADIUS_METERS,
+        2 * float(accuracy),
+    )
+
+
 def _infer_live_vehicle_state(
     points: list[TripPoint],
     now: datetime,
@@ -88,35 +99,24 @@ def _infer_live_vehicle_state(
     if len(ordered_points) < 2:
         return "moving"
 
-    last_accuracy = last_point.accuracy
-    if last_accuracy is None or last_accuracy <= 0:
-        last_accuracy = LIVE_STATE_ACCURACY_FALLBACK_METERS
+    for previous_point in reversed(ordered_points[:-1]):
+        previous_timestamp = _normalize_datetime(previous_point.timestamp)
+        if previous_timestamp is None:
+            continue
 
-    stop_radius_meters = max(
-        LIVE_STATE_MIN_RADIUS_METERS,
-        2 * float(last_accuracy),
-    )
+        if last_timestamp - previous_timestamp < LIVE_STATE_STOPPED_MIN_DURATION:
+            continue
 
-    stationary_points = [
-        point
-        for point in ordered_points
-        if _distance_meters(
-            point.latitude,
-            point.longitude,
+        stop_radius_meters = _get_stop_radius_meters(previous_point)
+        distance_to_last = _distance_meters(
+            previous_point.latitude,
+            previous_point.longitude,
             last_point.latitude,
             last_point.longitude,
-        ) <= stop_radius_meters
-    ]
+        )
 
-    if len(stationary_points) < 2:
-        return "moving"
-
-    first_stationary_timestamp = _normalize_datetime(stationary_points[0].timestamp)
-    if first_stationary_timestamp is None:
-        return "unknown"
-
-    if last_timestamp - first_stationary_timestamp >= LIVE_STATE_STOPPED_MIN_DURATION:
-        return "stopped"
+        if distance_to_last <= stop_radius_meters:
+            return "stopped"
 
     return "moving"
 
