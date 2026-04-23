@@ -198,6 +198,15 @@ private fun DiagnosticsCard(state: UiState) {
             DiagnosticRow("Timestamp", state.lastLocationTimestamp)
 
             Text("Filtro GPS", fontWeight = FontWeight.Bold)
+            DiagnosticRow("Ultimo tipo de envio", state.lastSendType)
+            DiagnosticRow(
+                "Tiempo desde aceptado",
+                state.secondsSinceLastAcceptedPoint?.toString() ?: "sin dato",
+            )
+            DiagnosticRow(
+                "Descartes distancia desde aceptado",
+                state.distanceMinimumDiscardCountSinceLastAccepted.toString(),
+            )
             DiagnosticRow("Ultimo descarte", state.lastDiscardReason)
             DiagnosticRow(
                 "Segundos desde aceptado",

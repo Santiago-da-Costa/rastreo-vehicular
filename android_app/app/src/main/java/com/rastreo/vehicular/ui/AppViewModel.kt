@@ -52,6 +52,9 @@ data class UiState(
     val lastFilterElapsedSeconds: Long? = null,
     val lastFilterRequiredDistanceMeters: Double? = null,
     val lastFilterActualDistanceMeters: Double? = null,
+    val secondsSinceLastAcceptedPoint: Long? = null,
+    val distanceMinimumDiscardCountSinceLastAccepted: Int = 0,
+    val lastSendType: String = "Sin envio",
     val operationMessage: String = "Esperando accion.",
     val lastErrorMessage: String = "",
     val hasLocationPermission: Boolean = false,
@@ -72,6 +75,7 @@ class AppViewModel(
 
     private var trackingJob: Job? = null
     private var lastAcceptedPoint: AcceptedPoint? = null
+    private var distanceMinimumDiscardCountSinceLastAccepted = 0
 
     fun bootstrap() {
         viewModelScope.launch {
@@ -224,6 +228,7 @@ class AppViewModel(
         viewModelScope.launch {
             trackingJob?.cancel()
             lastAcceptedPoint = null
+            distanceMinimumDiscardCountSinceLastAccepted = 0
             sessionStore.clearSession()
             _uiState.update {
                 it.copy(
@@ -250,6 +255,9 @@ class AppViewModel(
                     lastFilterElapsedSeconds = null,
                     lastFilterRequiredDistanceMeters = null,
                     lastFilterActualDistanceMeters = null,
+                    secondsSinceLastAcceptedPoint = null,
+                    distanceMinimumDiscardCountSinceLastAccepted = 0,
+                    lastSendType = "Sin envio",
                     statusMessage = "Sesion cerrada.",
                     operationMessage = "Sesion cerrada.",
                     lastErrorMessage = "",
@@ -384,9 +392,13 @@ class AppViewModel(
                         lastFilterElapsedSeconds = null,
                         lastFilterRequiredDistanceMeters = null,
                         lastFilterActualDistanceMeters = null,
+                        secondsSinceLastAcceptedPoint = null,
+                        distanceMinimumDiscardCountSinceLastAccepted = 0,
+                        lastSendType = "Sin envio",
                     )
                 }
                 lastAcceptedPoint = null
+                distanceMinimumDiscardCountSinceLastAccepted = 0
                 trackingLoop(trip.id, token)
             }.onFailure {
                 val message = it.message ?: "No se pudo iniciar el trip."
@@ -432,6 +444,7 @@ class AppViewModel(
                 repository.stopTrip(uiState.value.baseUrl, token, tripId)
             }.onSuccess {
                 lastAcceptedPoint = null
+                distanceMinimumDiscardCountSinceLastAccepted = 0
                 _uiState.update {
                     it.copy(
                         isBusy = false,
@@ -499,10 +512,18 @@ class AppViewModel(
                 )
             }
 
-            if (!validation.isAccepted) {
+            if (validation.discardType == DiscardType.MINIMUM_DISTANCE) {
+                distanceMinimumDiscardCountSinceLastAccepted += 1
+            }
+
+            val shouldSendPermanencePoint = shouldSendPermanencePoint(validation)
+            if (!validation.isAccepted && !shouldSendPermanencePoint) {
                 val reason = validation.discardReason ?: "Punto descartado."
                 _uiState.update {
                     it.copy(
+                        secondsSinceLastAcceptedPoint = validation.elapsedSeconds,
+                        distanceMinimumDiscardCountSinceLastAccepted =
+                            distanceMinimumDiscardCountSinceLastAccepted,
                         lastDiscardReason = reason,
                         operationMessage = reason,
                         statusMessage = reason,
@@ -523,7 +544,14 @@ class AppViewModel(
             _uiState.update {
                 it.copy(
                     sendAttemptCount = it.sendAttemptCount + 1,
-                    operationMessage = "Enviando punto.",
+                    secondsSinceLastAcceptedPoint = validation.elapsedSeconds,
+                    distanceMinimumDiscardCountSinceLastAccepted =
+                        distanceMinimumDiscardCountSinceLastAccepted,
+                    operationMessage = if (shouldSendPermanencePoint) {
+                        "Enviando punto por permanencia."
+                    } else {
+                        "Enviando punto."
+                    },
                 )
             }
 
@@ -531,14 +559,30 @@ class AppViewModel(
                 repository.sendTripPoint(uiState.value.baseUrl, token, tripId, request)
             }.onSuccess {
                 val sentAt = Instant.now().toString()
+                val sendType = if (shouldSendPermanencePoint) {
+                    "Envio por permanencia"
+                } else {
+                    "Envio normal"
+                }
                 _uiState.update {
                     it.copy(
                         lastLocationText = "${location.latitude}, ${location.longitude}",
-                        statusMessage = "Ubicacion enviada correctamente.",
-                        operationMessage = "Punto enviado.",
+                        statusMessage = if (shouldSendPermanencePoint) {
+                            "Punto de permanencia enviado correctamente."
+                        } else {
+                            "Ubicacion enviada correctamente."
+                        },
+                        operationMessage = if (shouldSendPermanencePoint) {
+                            "Punto de permanencia enviado."
+                        } else {
+                            "Punto enviado."
+                        },
                         lastSuccessfulSendAt = sentAt,
                         sendSuccessCount = it.sendSuccessCount + 1,
                         lastDiscardReason = "Sin descarte",
+                        secondsSinceLastAcceptedPoint = 0,
+                        distanceMinimumDiscardCountSinceLastAccepted = 0,
+                        lastSendType = sendType,
                         lastErrorMessage = "",
                     )
                 }
@@ -547,6 +591,7 @@ class AppViewModel(
                     longitude = location.longitude,
                     acceptedAt = currentInstant,
                 )
+                distanceMinimumDiscardCountSinceLastAccepted = 0
             }.onFailure {
                 val failedAt = Instant.now().toString()
                 val message = it.message ?: "No se pudo enviar la ubicacion."
@@ -583,6 +628,11 @@ class AppViewModel(
             } else {
                 null
             },
+            discardType = if (accuracy != null && accuracy > MAX_ACCEPTED_ACCURACY_METERS) {
+                DiscardType.PRECISION
+            } else {
+                null
+            },
             elapsedSeconds = null,
             requiredDistanceMeters = requiredDistance,
             actualDistanceMeters = null,
@@ -600,6 +650,7 @@ class AppViewModel(
             accuracy != null && accuracy > MAX_ACCEPTED_ACCURACY_METERS -> PointValidation(
                 isAccepted = false,
                 discardReason = "Descartado por precision.",
+                discardType = DiscardType.PRECISION,
                 elapsedSeconds = elapsedSeconds,
                 requiredDistanceMeters = requiredDistance,
                 actualDistanceMeters = actualDistance,
@@ -607,6 +658,7 @@ class AppViewModel(
             elapsedSeconds < MIN_SECONDS_BETWEEN_ACCEPTED_POINTS -> PointValidation(
                 isAccepted = false,
                 discardReason = "Descartado por tiempo minimo.",
+                discardType = DiscardType.MINIMUM_TIME,
                 elapsedSeconds = elapsedSeconds,
                 requiredDistanceMeters = requiredDistance,
                 actualDistanceMeters = actualDistance,
@@ -614,6 +666,7 @@ class AppViewModel(
             requiredDistance != null && actualDistance < requiredDistance -> PointValidation(
                 isAccepted = false,
                 discardReason = "Descartado por distancia minima.",
+                discardType = DiscardType.MINIMUM_DISTANCE,
                 elapsedSeconds = elapsedSeconds,
                 requiredDistanceMeters = requiredDistance,
                 actualDistanceMeters = actualDistance,
@@ -621,6 +674,7 @@ class AppViewModel(
             else -> PointValidation(
                 isAccepted = true,
                 discardReason = null,
+                discardType = null,
                 elapsedSeconds = elapsedSeconds,
                 requiredDistanceMeters = requiredDistance,
                 actualDistanceMeters = actualDistance,
@@ -646,6 +700,13 @@ class AppViewModel(
         return earthRadiusMeters * c
     }
 
+    private fun shouldSendPermanencePoint(validation: PointValidation): Boolean {
+        return validation.discardType == DiscardType.MINIMUM_DISTANCE &&
+            validation.elapsedSeconds != null &&
+            validation.elapsedSeconds >= PERMANENCE_POINT_SECONDS &&
+            distanceMinimumDiscardCountSinceLastAccepted >= MIN_DISTANCE_DISCARDS_FOR_PERMANENCE
+    }
+
     private data class AcceptedPoint(
         val latitude: Double,
         val longitude: Double,
@@ -655,14 +716,23 @@ class AppViewModel(
     private data class PointValidation(
         val isAccepted: Boolean,
         val discardReason: String?,
+        val discardType: DiscardType?,
         val elapsedSeconds: Long?,
         val requiredDistanceMeters: Double?,
         val actualDistanceMeters: Double?,
     )
 
+    private enum class DiscardType {
+        PRECISION,
+        MINIMUM_TIME,
+        MINIMUM_DISTANCE,
+    }
+
     private companion object {
         private const val MAX_ACCEPTED_ACCURACY_METERS = 100f
         private const val MIN_SECONDS_BETWEEN_ACCEPTED_POINTS = 5L
+        private const val PERMANENCE_POINT_SECONDS = 120L
+        private const val MIN_DISTANCE_DISCARDS_FOR_PERMANENCE = 2
     }
 }
 
