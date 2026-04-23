@@ -30,3 +30,4 @@ class LiveVehiclePositionResponse(BaseModel):
     speed: float | None = None
     timestamp: datetime
     is_active: bool
+    estado_en_vivo: str

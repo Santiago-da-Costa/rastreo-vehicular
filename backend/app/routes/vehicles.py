@@ -28,6 +28,12 @@ LIVE_STATE_OFFLINE_THRESHOLD = timedelta(minutes=5)
 LIVE_STATE_STOPPED_MIN_DURATION = timedelta(seconds=120)
 LIVE_STATE_ACCURACY_FALLBACK_METERS = 50.0
 LIVE_STATE_MIN_RADIUS_METERS = 10.0
+LIVE_STATE_LABELS = {
+    "moving": "En movimiento",
+    "stopped": "Detenido",
+    "offline": "Sin conexión",
+    "unknown": "Desconocido",
+}
 
 
 def _normalize_datetime(value: datetime | None) -> datetime | None:
@@ -115,6 +121,10 @@ def _infer_live_vehicle_state(
     return "moving"
 
 
+def _translate_live_vehicle_state(state: str) -> str:
+    return LIVE_STATE_LABELS.get(state, LIVE_STATE_LABELS["unknown"])
+
+
 def get_vehicle_or_404(db: Session, vehicle_id: int) -> Vehicle:
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if vehicle is None:
@@ -180,13 +190,16 @@ def list_live_vehicle_positions(
             continue
 
         last_point = recent_points_desc[0]
-        # Internal-only heuristic for future live state exposure.
+        # The inferred state is now exposed as a compatible extra field in
+        # /vehicles/live while keeping the existing payload unchanged.
         inferred_state = _infer_live_vehicle_state(recent_points_desc, now)
+        estado_en_vivo = _translate_live_vehicle_state(inferred_state)
         logger.debug(
-            "Live vehicle state inferred for vehicle=%s trip=%s state=%s",
+            "Live vehicle state inferred for vehicle=%s trip=%s state=%s estado_en_vivo=%s",
             vehicle.id,
             trip.id,
             inferred_state,
+            estado_en_vivo,
         )
 
         live_positions.append({
@@ -199,6 +212,7 @@ def list_live_vehicle_positions(
             "speed": last_point.speed,
             "timestamp": last_point.timestamp,
             "is_active": True,
+            "estado_en_vivo": estado_en_vivo,
         })
 
     return sorted(live_positions, key=lambda item: item["vehicle_name"])
