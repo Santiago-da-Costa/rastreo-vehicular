@@ -132,6 +132,7 @@ private fun AppScreen(
             onUseLocalUrl = onUseLocalUrl,
             onSaveBaseUrl = onSaveBaseUrl,
         )
+        DiagnosticsCard(state = state)
 
         if (state.isBootstrapping) {
             LoadingCard("Restaurando sesion...")
@@ -152,6 +153,80 @@ private fun AppScreen(
                 onStopTracking = onStopTracking,
             )
         }
+    }
+}
+
+@Composable
+private fun DiagnosticsCard(state: UiState) {
+    val user = state.currentUser
+    val selectedVehicle = state.vehicles.firstOrNull { it.id == state.selectedVehicleId }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Diagnostico", style = MaterialTheme.typography.titleMedium)
+            Text("Estado general", fontWeight = FontWeight.Bold)
+            DiagnosticRow("Sesion iniciada", if (user != null) "si" else "no")
+            DiagnosticRow("Usuario", user?.let { it.fullName.ifBlank { it.username } } ?: "sin sesion")
+            DiagnosticRow(
+                "Vehiculo",
+                selectedVehicle?.let { "${it.nombre} (${it.id})" }
+                    ?: state.selectedVehicleId?.toString()
+                    ?: "ninguno",
+            )
+            DiagnosticRow("Trip activo", if (state.currentTripId != null) "si" else "no")
+            DiagnosticRow("Trip ID", state.currentTripId?.toString() ?: "sin iniciar")
+            DiagnosticRow("Categoria", state.category.ifBlank { "sin categoria" })
+
+            Text("Tracking", fontWeight = FontWeight.Bold)
+            DiagnosticRow("Trackeando", if (state.isTracking) "si" else "no")
+            DiagnosticRow("Ultimo intento lectura", state.lastLocationReadAttemptAt)
+            DiagnosticRow("Ultima ubicacion obtenida", state.lastLocationObtainedAt)
+            DiagnosticRow("Ultimo envio exitoso", state.lastSuccessfulSendAt)
+            DiagnosticRow("Ultimo fallo de envio", state.lastFailedSendAt)
+            DiagnosticRow("Intentos de envio", state.sendAttemptCount.toString())
+            DiagnosticRow("Envios exitosos", state.sendSuccessCount.toString())
+            DiagnosticRow("Fallos de envio", state.sendFailureCount.toString())
+
+            Text("Ultima ubicacion", fontWeight = FontWeight.Bold)
+            DiagnosticRow("Latitud", state.lastLatitude?.toString() ?: "sin dato")
+            DiagnosticRow("Longitud", state.lastLongitude?.toString() ?: "sin dato")
+            DiagnosticRow("Accuracy", state.lastAccuracy?.toString() ?: "sin dato")
+            DiagnosticRow("Speed", state.lastSpeed?.toString() ?: "sin dato")
+            DiagnosticRow("Timestamp", state.lastLocationTimestamp)
+
+            Text("Filtro GPS", fontWeight = FontWeight.Bold)
+            DiagnosticRow("Ultimo descarte", state.lastDiscardReason)
+            DiagnosticRow(
+                "Segundos desde aceptado",
+                state.lastFilterElapsedSeconds?.toString() ?: "sin dato",
+            )
+            DiagnosticRow(
+                "Distancia requerida",
+                state.lastFilterRequiredDistanceMeters?.let { "${it.toInt()} m" } ?: "sin dato",
+            )
+            DiagnosticRow(
+                "Distancia real",
+                state.lastFilterActualDistanceMeters?.let { "${it.toInt()} m" } ?: "sin dato",
+            )
+
+            Text("Resultado operativo", fontWeight = FontWeight.Bold)
+            Text(state.operationMessage, style = MaterialTheme.typography.bodyMedium)
+            if (state.lastErrorMessage.isNotBlank()) {
+                Text("Ultimo error", fontWeight = FontWeight.Bold)
+                Text(state.lastErrorMessage, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
