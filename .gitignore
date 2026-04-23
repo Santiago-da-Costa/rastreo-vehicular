@@ -1,4 +1,52 @@
+﻿# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
 .env
+
+# Local database / runtime files
 rastreo.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Android / Gradle
+.gradle/
+**/.gradle/
+build/
+**/build/
+!**/src/**/build/
+
+# Android generated packages
+*.apk
+*.ap_
+*.aab
+*.aar
+*.dex
+*.class
+
+# Android local config
+local.properties
+
+# Android Studio / IntelliJ local files
+.idea/caches/
+.idea/shelf/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries/
+*.iml
+
+# Kotlin / Java build leftovers
+.kotlin/
+out/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.log
