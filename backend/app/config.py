@@ -55,6 +55,7 @@ if not JWT_SECRET_KEY:
     JWT_SECRET_KEY = secrets.token_urlsafe(32)
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
 
 CREATE_INITIAL_ADMIN = os.getenv("CREATE_INITIAL_ADMIN", "false").lower() in {
     "1",
