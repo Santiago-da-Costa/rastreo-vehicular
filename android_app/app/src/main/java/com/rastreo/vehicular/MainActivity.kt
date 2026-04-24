@@ -176,8 +176,13 @@ private fun DiagnosticsCard(state: UiState) {
                     ?: state.selectedVehicleId?.toString()
                     ?: "ninguno",
             )
+            DiagnosticRow("Sesion invalida", if (state.isSessionInvalid) "si" else "no")
             DiagnosticRow("Trip activo", if (state.currentTripId != null) "si" else "no")
             DiagnosticRow("Trip ID", state.currentTripId?.toString() ?: "sin iniciar")
+            DiagnosticRow(
+                "Cierre de recorrido pendiente",
+                if (state.pendingTripClose) "si" else "no",
+            )
             DiagnosticRow("Categoria", state.category.ifBlank { "sin categoria" })
 
             Text("Tracking", fontWeight = FontWeight.Bold)

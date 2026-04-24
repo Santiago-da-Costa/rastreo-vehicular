@@ -18,12 +18,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import retrofit2.HttpException
 
 data class UiState(
     val isBootstrapping: Boolean = true,
@@ -34,6 +36,8 @@ data class UiState(
     val category: String = "trabajo",
     val currentTripId: Int? = null,
     val isTracking: Boolean = false,
+    val isSessionInvalid: Boolean = false,
+    val pendingTripClose: Boolean = false,
     val lastLocationText: String = "Sin dato",
     val lastAttemptText: String = "Sin intento",
     val lastLocationReadAttemptAt: String = "Sin intento",
@@ -94,6 +98,7 @@ class AppViewModel(
                 _uiState.update {
                     it.copy(
                         isBootstrapping = false,
+                        isSessionInvalid = false,
                         statusMessage = "Sesion no iniciada.",
                         operationMessage = "Sesion no iniciada.",
                     )
@@ -101,32 +106,53 @@ class AppViewModel(
                 return@launch
             }
 
-            runCatching {
+            val restoreResult = runCatching {
                 val user = repository.me(baseUrl, session.token)
                 val vehicles = repository.listVehicles(baseUrl, session.token)
+                user to vehicles
+            }
+
+            val restoredSession = restoreResult.getOrNull()
+            if (restoredSession != null) {
+                val (user, vehicles) = restoredSession
                 _uiState.update {
                     it.copy(
                         isBootstrapping = false,
                         currentUser = user,
                         vehicles = vehicles,
                         selectedVehicleId = chooseVehicle(user.vehicleIds, vehicles),
+                        isSessionInvalid = false,
                         statusMessage = "Sesion restaurada.",
                         operationMessage = "Sesion restaurada.",
+                        lastErrorMessage = "",
                     )
                 }
-            }.onFailure {
-                val message = it.message ?: "No se pudo restaurar la sesion. Vuelve a iniciar."
-                sessionStore.clearSession()
-                _uiState.update {
-                    it.copy(
-                        isBootstrapping = false,
-                        currentUser = null,
-                        vehicles = emptyList(),
-                        selectedVehicleId = null,
-                        statusMessage = message,
-                        operationMessage = "Fallo restaurando sesion.",
-                        lastErrorMessage = message,
+            } else {
+                val error = restoreResult.exceptionOrNull()
+                if (isUnauthorizedError(error)) {
+                    markSessionExpired(
+                        statusMessage = "Sesion expirada. Inicia sesion nuevamente.",
+                        operationMessage = "Sesion expirada.",
+                        clearUserContext = true,
                     )
+                } else {
+                    val message = if (isNetworkError(error)) {
+                        "No se pudo validar la sesion por problema de conexion."
+                    } else {
+                        error?.message ?: "No se pudo validar la sesion."
+                    }
+                    _uiState.update {
+                        it.copy(
+                            isBootstrapping = false,
+                            currentUser = null,
+                            vehicles = emptyList(),
+                            selectedVehicleId = null,
+                            isSessionInvalid = false,
+                            statusMessage = message,
+                            operationMessage = "Fallo validando sesion.",
+                            lastErrorMessage = message,
+                        )
+                    }
                 }
             }
         }
@@ -204,6 +230,7 @@ class AppViewModel(
                         selectedVehicleId = chooseVehicle(user.vehicleIds, vehicles),
                         baseUrl = RastreoRepository.normalizeBaseUrl(baseUrl),
                         baseUrlDraft = RastreoRepository.normalizeBaseUrl(baseUrl),
+                        isSessionInvalid = false,
                         statusMessage = "Sesion iniciada correctamente.",
                         operationMessage = "Sesion iniciada correctamente.",
                         lastErrorMessage = "",
@@ -237,6 +264,8 @@ class AppViewModel(
                     selectedVehicleId = null,
                     currentTripId = null,
                     isTracking = false,
+                    isSessionInvalid = false,
+                    pendingTripClose = false,
                     lastLocationText = "Sin dato",
                     lastAttemptText = "Sin intento",
                     lastLocationReadAttemptAt = "Sin intento",
@@ -268,6 +297,17 @@ class AppViewModel(
 
     fun loadVehicles() {
         val user = uiState.value.currentUser ?: return
+        if (uiState.value.isSessionInvalid) {
+            val message = "Sesion expirada. Inicia sesion nuevamente."
+            _uiState.update {
+                it.copy(
+                    statusMessage = message,
+                    operationMessage = "Sesion expirada.",
+                    lastErrorMessage = message,
+                )
+            }
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, statusMessage = "Recargando vehiculos...") }
@@ -327,6 +367,17 @@ class AppViewModel(
         val vehicleId = state.selectedVehicleId
         val user = state.currentUser
         if (user == null) return
+        if (state.isSessionInvalid) {
+            val message = "Sesion expirada. Inicia sesion nuevamente."
+            _uiState.update {
+                it.copy(
+                    statusMessage = message,
+                    operationMessage = "Sesion expirada.",
+                    lastErrorMessage = message,
+                )
+            }
+            return
+        }
         if (user.permissions["edit_trips"] != true) {
             val message = "El backend actual no permite tracking para este usuario."
             _uiState.update {
@@ -365,14 +416,20 @@ class AppViewModel(
         trackingJob = viewModelScope.launch {
             val token = sessionStore.sessionData.first().token
             _uiState.update { it.copy(isBusy = true, statusMessage = "Iniciando tracking...") }
-            runCatching {
+            val startTripResult = runCatching {
                 repository.startTrip(uiState.value.baseUrl, token, vehicleId, state.category.trim())
-            }.onSuccess { trip ->
+            }
+
+            val startedTrip = startTripResult.getOrNull()
+            if (startedTrip != null) {
+                val trip = startedTrip
                 _uiState.update {
                     it.copy(
                         isBusy = false,
                         currentTripId = trip.id,
                         isTracking = true,
+                        isSessionInvalid = false,
+                        pendingTripClose = false,
                         statusMessage = "Trip ${trip.id} iniciado. Enviando ubicacion...",
                         operationMessage = "Trip ${trip.id} iniciado.",
                         lastErrorMessage = "",
@@ -400,17 +457,30 @@ class AppViewModel(
                 lastAcceptedPoint = null
                 distanceMinimumDiscardCountSinceLastAccepted = 0
                 trackingLoop(trip.id, token)
-            }.onFailure {
-                val message = it.message ?: "No se pudo iniciar el trip."
-                _uiState.update { current ->
-                    current.copy(
-                        isBusy = false,
-                        isTracking = false,
-                        currentTripId = null,
-                        statusMessage = message,
-                        operationMessage = "Fallo inicio de tracking.",
-                        lastErrorMessage = message,
+            } else {
+                val error = startTripResult.exceptionOrNull()
+                if (isUnauthorizedError(error)) {
+                    markSessionExpired(
+                        statusMessage = "Sesion expirada. Inicia sesion nuevamente.",
+                        operationMessage = "Sesion expirada antes de iniciar tracking.",
+                        clearUserContext = true,
                     )
+                } else {
+                    val message = if (isNetworkError(error)) {
+                        "No se pudo iniciar el recorrido por problema de conexion."
+                    } else {
+                        error?.message ?: "No se pudo iniciar el trip."
+                    }
+                    _uiState.update { current ->
+                        current.copy(
+                            isBusy = false,
+                            isTracking = false,
+                            currentTripId = null,
+                            statusMessage = message,
+                            operationMessage = "Fallo inicio de tracking.",
+                            lastErrorMessage = message,
+                        )
+                    }
                 }
             }
         }
@@ -428,6 +498,18 @@ class AppViewModel(
             }
             return
         }
+        if (uiState.value.isSessionInvalid) {
+            val message = "Sesion expirada. El cierre del recorrido quedo pendiente."
+            _uiState.update {
+                it.copy(
+                    pendingTripClose = true,
+                    statusMessage = message,
+                    operationMessage = "Cierre pendiente por sesion expirada.",
+                    lastErrorMessage = message,
+                )
+            }
+            return
+        }
 
         trackingJob?.cancel()
         viewModelScope.launch {
@@ -440,9 +522,11 @@ class AppViewModel(
                 )
             }
 
-            runCatching {
+            val stopTripResult = runCatching {
                 repository.stopTrip(uiState.value.baseUrl, token, tripId)
-            }.onSuccess {
+            }
+
+            if (stopTripResult.isSuccess) {
                 lastAcceptedPoint = null
                 distanceMinimumDiscardCountSinceLastAccepted = 0
                 _uiState.update {
@@ -450,20 +534,38 @@ class AppViewModel(
                         isBusy = false,
                         currentTripId = null,
                         isTracking = false,
+                        pendingTripClose = false,
+                        isSessionInvalid = false,
                         statusMessage = "Trip $tripId detenido.",
                         operationMessage = "Tracking detenido.",
                     )
                 }
-            }.onFailure {
-                val message = it.message ?: "No se pudo cerrar el trip en backend."
-                _uiState.update { state ->
-                    state.copy(
-                        isBusy = false,
-                        currentTripId = tripId,
-                        statusMessage = message,
-                        operationMessage = "Fallo deteniendo tracking.",
-                        lastErrorMessage = message,
+            } else {
+                val error = stopTripResult.exceptionOrNull()
+                if (isUnauthorizedError(error)) {
+                    markSessionExpired(
+                        statusMessage = "Sesion expirada. El cierre del recorrido quedo pendiente.",
+                        operationMessage = "Cierre pendiente por sesion expirada.",
+                        preserveTripId = tripId,
+                        pendingTripClose = true,
+                        clearUserContext = false,
                     )
+                } else {
+                    val message = if (isNetworkError(error)) {
+                        "No se pudo cerrar el recorrido por problema de conexion. El cierre quedo pendiente."
+                    } else {
+                        error?.message ?: "No se pudo cerrar el trip en backend."
+                    }
+                    _uiState.update { state ->
+                        state.copy(
+                            isBusy = false,
+                            currentTripId = tripId,
+                            pendingTripClose = true,
+                            statusMessage = message,
+                            operationMessage = "Fallo deteniendo tracking.",
+                            lastErrorMessage = message,
+                        )
+                    }
                 }
             }
         }
@@ -555,9 +657,11 @@ class AppViewModel(
                 )
             }
 
-            runCatching {
+            val sendPointResult = runCatching {
                 repository.sendTripPoint(uiState.value.baseUrl, token, tripId, request)
-            }.onSuccess {
+            }
+
+            if (sendPointResult.isSuccess) {
                 val sentAt = Instant.now().toString()
                 val sendType = if (shouldSendPermanencePoint) {
                     "Envio por permanencia"
@@ -582,6 +686,8 @@ class AppViewModel(
                         lastDiscardReason = "Sin descarte",
                         secondsSinceLastAcceptedPoint = 0,
                         distanceMinimumDiscardCountSinceLastAccepted = 0,
+                        pendingTripClose = false,
+                        isSessionInvalid = false,
                         lastSendType = sendType,
                         lastErrorMessage = "",
                     )
@@ -592,22 +698,91 @@ class AppViewModel(
                     acceptedAt = currentInstant,
                 )
                 distanceMinimumDiscardCountSinceLastAccepted = 0
-            }.onFailure {
+            } else {
+                val error = sendPointResult.exceptionOrNull()
                 val failedAt = Instant.now().toString()
-                val message = it.message ?: "No se pudo enviar la ubicacion."
-                _uiState.update { state ->
-                    state.copy(
+                if (isUnauthorizedError(error)) {
+                    markSessionExpired(
+                        statusMessage = "Sesion expirada durante el tracking. Inicia sesion nuevamente para cerrar o continuar.",
+                        operationMessage = "Tracking detenido por sesion expirada.",
+                        preserveTripId = tripId,
+                        pendingTripClose = true,
+                        clearUserContext = false,
+                        failedAt = failedAt,
                         lastLocationText = "${location.latitude}, ${location.longitude}",
-                        statusMessage = message,
-                        operationMessage = "Fallo envio.",
-                        lastFailedSendAt = failedAt,
-                        sendFailureCount = state.sendFailureCount + 1,
-                        lastErrorMessage = message,
+                        incrementSendFailure = true,
                     )
+                } else {
+                    val message = if (isNetworkError(error)) {
+                        "No se pudo enviar la ubicacion por problema de conexion."
+                    } else {
+                        error?.message ?: "No se pudo enviar la ubicacion."
+                    }
+                    _uiState.update { state ->
+                        state.copy(
+                            lastLocationText = "${location.latitude}, ${location.longitude}",
+                            statusMessage = message,
+                            operationMessage = "Fallo envio.",
+                            lastFailedSendAt = failedAt,
+                            sendFailureCount = state.sendFailureCount + 1,
+                            lastErrorMessage = message,
+                        )
+                    }
                 }
             }
 
+            if (!uiState.value.isTracking) {
+                break
+            }
+
             kotlinx.coroutines.delay(BuildConfig.TRACKING_INTERVAL_MS)
+        }
+    }
+
+    private fun isUnauthorizedError(error: Throwable?): Boolean {
+        return error is HttpException && error.code() == 401
+    }
+
+    private fun isNetworkError(error: Throwable?): Boolean {
+        return error is IOException
+    }
+
+    private suspend fun markSessionExpired(
+        statusMessage: String,
+        operationMessage: String,
+        preserveTripId: Int? = uiState.value.currentTripId,
+        pendingTripClose: Boolean = false,
+        clearUserContext: Boolean = false,
+        failedAt: String? = null,
+        lastLocationText: String? = null,
+        incrementSendFailure: Boolean = false,
+    ) {
+        sessionStore.clearSession()
+        lastAcceptedPoint = null
+        distanceMinimumDiscardCountSinceLastAccepted = 0
+
+        _uiState.update { state ->
+            state.copy(
+                isBootstrapping = false,
+                isBusy = false,
+                currentUser = if (clearUserContext) null else state.currentUser,
+                vehicles = if (clearUserContext) emptyList() else state.vehicles,
+                selectedVehicleId = if (clearUserContext) null else state.selectedVehicleId,
+                currentTripId = preserveTripId,
+                isTracking = false,
+                isSessionInvalid = true,
+                pendingTripClose = pendingTripClose,
+                lastLocationText = lastLocationText ?: state.lastLocationText,
+                lastFailedSendAt = failedAt ?: state.lastFailedSendAt,
+                sendFailureCount = if (incrementSendFailure) {
+                    state.sendFailureCount + 1
+                } else {
+                    state.sendFailureCount
+                },
+                statusMessage = statusMessage,
+                operationMessage = operationMessage,
+                lastErrorMessage = statusMessage,
+            )
         }
     }
 
