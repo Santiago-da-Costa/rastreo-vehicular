@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.rastreo.vehicular.data.PendingSyncStore
 import com.rastreo.vehicular.data.PendingTripPointDraft
 import com.rastreo.vehicular.BuildConfig
+import com.rastreo.vehicular.data.RefreshTransientException
 import com.rastreo.vehicular.data.RastreoRepository
 import com.rastreo.vehicular.data.SessionStore
 import com.rastreo.vehicular.data.TripPointRequest
@@ -53,6 +54,7 @@ data class UiState(
     val autoCloseRetryActive: Boolean = false,
     val autoCloseRetryStatus: String = "Sin cierre pendiente",
     val autoCloseRetryAttemptCount: Int = 0,
+    val refreshAvailable: Boolean = false,
     val lastLocationText: String = "Sin dato",
     val lastAttemptText: String = "Sin intento",
     val lastLocationReadAttemptAt: String = "Sin intento",
@@ -118,6 +120,7 @@ class AppViewModel(
                     it.copy(
                         isBootstrapping = false,
                         isSessionInvalid = false,
+                        refreshAvailable = session.refreshToken.isNotBlank(),
                         statusMessage = "Sesion no iniciada.",
                         operationMessage = "Sesion no iniciada.",
                     )
@@ -141,6 +144,7 @@ class AppViewModel(
                         vehicles = vehicles,
                         selectedVehicleId = chooseVehicle(user.vehicleIds, vehicles),
                         isSessionInvalid = false,
+                        refreshAvailable = session.refreshToken.isNotBlank(),
                         statusMessage = "Sesion restaurada.",
                         operationMessage = "Sesion restaurada.",
                         lastErrorMessage = "",
@@ -238,15 +242,15 @@ class AppViewModel(
             val loginResult = runCatching {
                 val token = repository.login(baseUrl, username, password)
                 sessionStore.saveBaseUrl(RastreoRepository.normalizeBaseUrl(baseUrl))
-                sessionStore.saveToken(token.accessToken)
+                sessionStore.saveAuthTokens(token.accessToken, token.refreshToken)
                 val user = repository.me(baseUrl, token.accessToken)
                 val vehicles = repository.listVehicles(baseUrl, token.accessToken)
-                Triple(token.accessToken, user, vehicles)
+                Triple(token, user, vehicles)
             }
 
             val loginData = loginResult.getOrNull()
             if (loginData != null) {
-                val (token, user, vehicles) = loginData
+                val (tokenResponse, user, vehicles) = loginData
                 _uiState.update {
                     it.copy(
                         isBusy = false,
@@ -257,6 +261,7 @@ class AppViewModel(
                         baseUrl = RastreoRepository.normalizeBaseUrl(baseUrl),
                         baseUrlDraft = RastreoRepository.normalizeBaseUrl(baseUrl),
                         isSessionInvalid = false,
+                        refreshAvailable = tokenResponse.refreshToken?.isNotBlank() == true,
                         statusMessage = "Sesion iniciada correctamente.",
                         operationMessage = "Sesion iniciada correctamente.",
                         lastErrorMessage = "",
@@ -265,7 +270,7 @@ class AppViewModel(
                 refreshPendingSyncUi()
                 syncPendingStateAfterAuthenticatedSession(
                     baseUrl = RastreoRepository.normalizeBaseUrl(baseUrl),
-                    token = token,
+                    token = tokenResponse.accessToken,
                 )
                 ensurePendingCloseRetry()
             } else {
@@ -306,6 +311,7 @@ class AppViewModel(
                     pendingCloseTripId = pendingSyncState.pendingClose?.tripId,
                     autoCloseRetryActive = false,
                     autoCloseRetryStatus = "Sin cierre pendiente",
+                    refreshAvailable = false,
                     lastLocationText = "Sin dato",
                     lastAttemptText = "Sin intento",
                     lastLocationReadAttemptAt = "Sin intento",
@@ -926,7 +932,7 @@ class AppViewModel(
     }
 
     private fun isNetworkError(error: Throwable?): Boolean {
-        return error is IOException
+        return error is IOException || error is RefreshTransientException
     }
 
     private suspend fun markSessionExpired(
@@ -965,6 +971,7 @@ class AppViewModel(
                 } else {
                     "Sin cierre pendiente"
                 },
+                refreshAvailable = false,
                 lastLocationText = lastLocationText ?: state.lastLocationText,
                 lastFailedSendAt = failedAt ?: state.lastFailedSendAt,
                 sendFailureCount = if (incrementSendFailure) {
@@ -984,6 +991,7 @@ class AppViewModel(
         forceTripId: Int? = null,
     ) {
         val pendingSyncState = pendingSyncStore.getState()
+        val session = sessionStore.sessionData.first()
         val pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId
         val pendingCloseTripId = pendingSyncState.pendingClose?.tripId
         val storedTripId = forceTripId
@@ -1003,6 +1011,7 @@ class AppViewModel(
                 pendingPointCount = pendingSyncState.pendingPoints.size,
                 pendingQueueTripId = pendingQueueTripId,
                 pendingCloseTripId = pendingCloseTripId,
+                refreshAvailable = session.refreshToken.isNotBlank(),
                 autoCloseRetryStatus = if (pendingCloseTripId == null &&
                     pendingCloseRetryJob?.isActive != true
                 ) {
@@ -1538,10 +1547,11 @@ class AppViewModelFactory(
     private val context: Context,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        val sessionStore = SessionStore(context)
         return AppViewModel(
-            sessionStore = SessionStore(context),
+            sessionStore = sessionStore,
             pendingSyncStore = PendingSyncStore(context),
-            repository = RastreoRepository(),
+            repository = RastreoRepository(sessionStore),
             locationRepository = LocationRepository(context),
         ) as T
     }

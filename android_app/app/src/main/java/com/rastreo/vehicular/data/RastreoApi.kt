@@ -9,6 +9,9 @@ interface RastreoApi {
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): TokenResponse
 
+    @POST("auth/refresh")
+    suspend fun refresh(@Body request: RefreshTokenRequest): TokenResponse
+
     @GET("auth/me")
     suspend fun me(): UserMeResponse
 

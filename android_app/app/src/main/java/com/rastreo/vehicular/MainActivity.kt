@@ -177,6 +177,7 @@ private fun DiagnosticsCard(state: UiState) {
                     ?: "ninguno",
             )
             DiagnosticRow("Sesion invalida", if (state.isSessionInvalid) "si" else "no")
+            DiagnosticRow("Refresh disponible", if (state.refreshAvailable) "si" else "no")
             DiagnosticRow("Trip activo", if (state.currentTripId != null) "si" else "no")
             DiagnosticRow("Trip ID", state.currentTripId?.toString() ?: "sin iniciar")
             DiagnosticRow("Puntos pendientes", state.pendingPointCount.toString())

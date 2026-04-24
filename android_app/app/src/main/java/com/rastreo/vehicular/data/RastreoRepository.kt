@@ -1,13 +1,22 @@
 package com.rastreo.vehicular.data
 
 import com.rastreo.vehicular.BuildConfig
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.HttpException
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.IOException
 
-class RastreoRepository {
+class RastreoRepository(
+    private val sessionStore: SessionStore,
+) {
+    private val refreshMutex = Mutex()
+
     private fun buildApi(baseUrl: String, token: String?): RastreoApi {
         val authInterceptor = Interceptor { chain ->
             val requestBuilder = chain.request().newBuilder()
@@ -39,11 +48,15 @@ class RastreoRepository {
     }
 
     suspend fun me(baseUrl: String, token: String): UserMeResponse {
-        return buildApi(baseUrl, token).me()
+        return executeAuthenticated(baseUrl, token) { api ->
+            api.me()
+        }
     }
 
     suspend fun listVehicles(baseUrl: String, token: String): List<Vehicle> {
-        return buildApi(baseUrl, token).listVehicles()
+        return executeAuthenticated(baseUrl, token) { api ->
+            api.listVehicles()
+        }
     }
 
     suspend fun startTrip(
@@ -52,7 +65,9 @@ class RastreoRepository {
         vehicleId: Int,
         categoria: String,
     ): TripResponse {
-        return buildApi(baseUrl, token).startTrip(TripStartRequest(vehicleId, categoria))
+        return executeAuthenticated(baseUrl, token) { api ->
+            api.startTrip(TripStartRequest(vehicleId, categoria))
+        }
     }
 
     suspend fun sendTripPoint(
@@ -61,11 +76,94 @@ class RastreoRepository {
         tripId: Int,
         request: TripPointRequest,
     ) {
-        buildApi(baseUrl, token).sendTripPoint(tripId, request)
+        executeAuthenticated(baseUrl, token) { api ->
+            api.sendTripPoint(tripId, request)
+        }
     }
 
     suspend fun stopTrip(baseUrl: String, token: String, tripId: Int): TripResponse {
-        return buildApi(baseUrl, token).stopTrip(tripId)
+        return executeAuthenticated(baseUrl, token) { api ->
+            api.stopTrip(tripId)
+        }
+    }
+
+    private suspend fun <T> executeAuthenticated(
+        baseUrl: String,
+        token: String,
+        call: suspend (RastreoApi) -> T,
+    ): T {
+        val normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+        val sessionToken = sessionStore.sessionData.first().token
+        val initialToken = sessionToken.ifBlank { token }
+
+        return try {
+            call(buildApi(normalizedBaseUrl, initialToken))
+        } catch (error: Throwable) {
+            if (!isUnauthorizedError(error)) {
+                throw error
+            }
+
+            val refreshed = refreshSessionIfPossible(
+                baseUrl = normalizedBaseUrl,
+                failedAccessToken = initialToken,
+            )
+
+            if (!refreshed) {
+                throw error
+            }
+
+            val refreshedToken = sessionStore.sessionData.first().token
+            if (refreshedToken.isBlank()) {
+                throw error
+            }
+
+            call(buildApi(normalizedBaseUrl, refreshedToken))
+        }
+    }
+
+    private suspend fun refreshSessionIfPossible(
+        baseUrl: String,
+        failedAccessToken: String,
+    ): Boolean {
+        return refreshMutex.withLock {
+            val currentSession = sessionStore.sessionData.first()
+            if (currentSession.token.isNotBlank() && currentSession.token != failedAccessToken) {
+                return@withLock true
+            }
+
+            val refreshToken = currentSession.refreshToken
+            if (refreshToken.isBlank()) {
+                return@withLock false
+            }
+
+            val refreshResult = runCatching {
+                buildApi(baseUrl, token = null).refresh(RefreshTokenRequest(refreshToken))
+            }
+
+            val refreshedTokens = refreshResult.getOrNull()
+            if (refreshedTokens != null) {
+                sessionStore.saveAuthTokens(
+                    accessToken = refreshedTokens.accessToken,
+                    refreshToken = refreshedTokens.refreshToken ?: refreshToken,
+                )
+                return@withLock true
+            }
+
+            val refreshError = refreshResult.exceptionOrNull()
+            if (isUnauthorizedError(refreshError)) {
+                sessionStore.clearSession()
+                return@withLock false
+            }
+
+            throw RefreshTransientException(
+                message = refreshError?.message ?: "No se pudo refrescar la sesion.",
+                cause = refreshError,
+            )
+        }
+    }
+
+    private fun isUnauthorizedError(error: Throwable?): Boolean {
+        return error is HttpException && error.code() == 401
     }
 
     companion object {
@@ -80,3 +178,8 @@ class RastreoRepository {
         }
     }
 }
+
+class RefreshTransientException(
+    message: String,
+    cause: Throwable? = null,
+) : IOException(message, cause)
