@@ -1091,6 +1091,35 @@
             border-color: #fcd34d;
         }
 
+        .trip-stop-icon {
+            background: transparent;
+            border: 0;
+        }
+
+        .trip-stop-pin {
+            position: relative;
+            display: block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid #ffffff;
+            border-radius: 999px;
+            background: #ea580c;
+            box-shadow: 0 6px 12px rgba(15, 23, 42, 0.22);
+        }
+
+        .trip-stop-pin::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -6px;
+            width: 10px;
+            height: 10px;
+            background: #ea580c;
+            border-radius: 2px;
+            transform: translateX(-50%) rotate(45deg);
+            z-index: -1;
+        }
+
         .live-vehicle-label {
             color: #0f172a;
             font-size: 11px;
@@ -1868,6 +1897,7 @@
         let pointLayer = L.layerGroup().addTo(map);
         let manualDrawLayer = L.layerGroup().addTo(map);
         let liveVehicleLayer = L.layerGroup().addTo(map);
+        let tripStopsLayer = L.layerGroup().addTo(map);
         let routeLine = null;
         let manualDrawLine = null;
         let replayLine = null;
@@ -1917,9 +1947,20 @@
         let pendingCategoryValue = null;
         let pendingCategoryTripId = null;
         let dataLoadVersion = 0;
+        let tripStopsRequestVersion = 0;
         let currentUser = null;
         let currentView = "tracking";
         let isSidebarOpen = false;
+        let currentTripStops = [];
+        let currentTripStopsTripId = null;
+        const tripStopMarkerIcon = L.divIcon({
+            className: "trip-stop-icon",
+            html: '<span class="trip-stop-pin"></span>',
+            iconSize: [18, 28],
+            iconAnchor: [9, 28],
+            popupAnchor: [0, -24],
+            tooltipAnchor: [0, -22]
+        });
 
         function refreshTrackingWorkspaceSize() {
             if (map) {
@@ -2563,6 +2604,77 @@
                 day: "2-digit",
                 hour: "2-digit",
                 minute: "2-digit"
+            });
+        }
+
+        function formatDurationHms(totalSeconds) {
+            const safeTotalSeconds = Math.max(0, Number(totalSeconds) || 0);
+            const hours = Math.floor(safeTotalSeconds / 3600);
+            const minutes = Math.floor((safeTotalSeconds % 3600) / 60);
+            const seconds = Math.floor(safeTotalSeconds % 60);
+            return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+        }
+
+        function getTripStopStatusLabel(status) {
+            return String(status || "").trim().toLowerCase() === "open" ? "En curso" : "Finalizada";
+        }
+
+        function getTripStopsTargetTripId() {
+            if (currentMode === "single") {
+                return currentTripId;
+            }
+
+            if (currentMode === "all") {
+                return selectedTripId;
+            }
+
+            return null;
+        }
+
+        function clearTripStopsLayer() {
+            tripStopsLayer.clearLayers();
+        }
+
+        function resetTripStopsState() {
+            tripStopsRequestVersion += 1;
+            currentTripStops = [];
+            currentTripStopsTripId = null;
+            clearTripStopsLayer();
+        }
+
+        function buildTripStopPopupContent(stop) {
+            return [
+                "<strong>Parada</strong>",
+                `Inicio: ${escapeHtml(formatDateTime(stop.start_time))}`,
+                stop.end_time ? `Fin: ${escapeHtml(formatDateTime(stop.end_time))}` : "Fin: Sin dato",
+                `Duracion: ${escapeHtml(formatDurationHms(stop.duration_seconds))}`,
+                `Estado: ${escapeHtml(getTripStopStatusLabel(stop.status))}`
+            ].join("<br>");
+        }
+
+        function createTripStopMarker(stop) {
+            return L.marker([stop.latitude, stop.longitude], {
+                icon: tripStopMarkerIcon,
+                keyboard: false
+            })
+                .bindTooltip("Parada")
+                .bindPopup(buildTripStopPopupContent(stop));
+        }
+
+        function renderCurrentTripStops() {
+            clearTripStopsLayer();
+
+            const targetTripId = getTripStopsTargetTripId();
+            if (targetTripId == null) {
+                return;
+            }
+
+            if (currentTripStopsTripId == null || String(currentTripStopsTripId) !== String(targetTripId)) {
+                return;
+            }
+
+            currentTripStops.forEach((stop) => {
+                createTripStopMarker(stop).addTo(tripStopsLayer);
             });
         }
 
@@ -3558,6 +3670,7 @@
                 centerRoute();
             }
 
+            void loadTripStops(tripId);
             setMessage(`Recorrido seleccionado: ${tripId}.`);
             updateTrackingSummaryBar();
         }
@@ -3578,6 +3691,8 @@
             if (showMessage) {
                 setMessage("Vista general de recorridos.");
             }
+
+            resetTripStopsState();
             updateTrackingSummaryBar();
         }
 
@@ -4072,6 +4187,16 @@
 
         async function fetchTripPoints(tripId) {
             const response = await auth.authFetch(`${apiBaseUrl}/trips/${tripId}/points`);
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        async function fetchTripStops(tripId) {
+            const response = await auth.authFetch(`${apiBaseUrl}/trips/${tripId}/stops`);
 
             if (!response.ok) {
                 throw new Error(`Error ${response.status}`);
@@ -4909,6 +5034,7 @@
             stopReplay();
             clearChartMapHighlight();
             pointLayer.clearLayers();
+            clearTripStopsLayer();
 
             if (routeLine) {
                 map.removeLayer(routeLine);
@@ -5071,6 +5197,7 @@
             });
 
             restoreRouteLine();
+            renderCurrentTripStops();
             renderTripSummary(currentTrip);
             renderTripsList();
 
@@ -5124,6 +5251,7 @@
 
             currentPoints = getChronologicalPoints(currentPoints);
             restoreRouteLine();
+            renderCurrentTripStops();
             renderTripSummary(null);
             renderTripsList();
 
@@ -5438,6 +5566,7 @@
                     isCategoryEditMode = false;
                     categoryEditTripId = null;
                     setSplitMode(false);
+                    resetTripStopsState();
                     clearMap();
                     renderTripSummary(currentTrip);
                     renderTripsList();
@@ -5448,6 +5577,7 @@
                 }
 
                 drawPoints(points, fitMap);
+                void loadTripStops(tripId);
                 if (showMessages) {
                     setMessage(`Recorrido cargado: ${points.length} punto(s). Categoría: ${getTripCategory()}.`);
                 }
@@ -5462,6 +5592,7 @@
                 isCategoryEditMode = false;
                 categoryEditTripId = null;
                 setSplitMode(false);
+                resetTripStopsState();
                 clearMap();
                 renderTripSummary(null);
                 renderTripsList();
@@ -5472,6 +5603,40 @@
                 if (showMessages && !isStaleDataLoad(loadVersion)) {
                     loadButton.disabled = false;
                 }
+            }
+        }
+
+        async function loadTripStops(tripId) {
+            if (tripId == null || tripId === "") {
+                resetTripStopsState();
+                return [];
+            }
+
+            const requestVersion = ++tripStopsRequestVersion;
+            currentTripStopsTripId = String(tripId);
+            currentTripStops = [];
+            renderCurrentTripStops();
+
+            try {
+                const stops = await fetchTripStops(tripId);
+                if (requestVersion !== tripStopsRequestVersion) {
+                    return [];
+                }
+
+                currentTripStopsTripId = String(tripId);
+                currentTripStops = Array.isArray(stops) ? stops : [];
+                renderCurrentTripStops();
+                return currentTripStops;
+            } catch (error) {
+                if (requestVersion !== tripStopsRequestVersion) {
+                    return [];
+                }
+
+                currentTripStopsTripId = String(tripId);
+                currentTripStops = [];
+                renderCurrentTripStops();
+                console.warn(`No se pudieron cargar las Paradas del trip ${tripId}.`, error);
+                return [];
             }
         }
 
