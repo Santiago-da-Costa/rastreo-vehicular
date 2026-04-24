@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 
 from app.config import CORS_ORIGINS
 from app.database import Base, SessionLocal, engine
-from app.models import trip, trip_point, user, vehicle
+from app.models import trip, trip_point, trip_stop, user, vehicle
 from app.routes import auth, trip_points, trips, users, vehicles
 from app.services.bootstrap import ensure_initial_admin
 

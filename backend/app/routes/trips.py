@@ -7,8 +7,10 @@ from app.database import get_db
 from app.dependencies.auth import get_current_active_user
 from app.models.trip import Trip
 from app.models.trip_point import TripPoint
+from app.models.trip_stop import TripStop
 from app.models.user import User
 from app.models.vehicle import Vehicle
+from app.schemas.trip_stops import TripStopResponse as TripStopItemResponse
 from app.schemas.trips import (
     TripCategoryUpdate,
     TripManualCreate,
@@ -19,6 +21,7 @@ from app.schemas.trips import (
     TripStart,
     TripStopResponse,
 )
+from app.services.trip_stops import finalize_open_trip_stop
 from app.utils.permissions import (
     filter_trip_query_for_user,
     get_accessible_trip_or_404,
@@ -47,6 +50,7 @@ def close_open_vehicle_trips(
         query = query.filter(Trip.id != exclude_trip_id)
 
     for open_trip in query.all():
+        finalize_open_trip_stop(db, open_trip.id, end_time=end_time)
         open_trip.status = "finished"
         open_trip.end_time = end_time
 
@@ -66,6 +70,21 @@ def get_trip(
     current_user: User = Depends(get_current_active_user),
 ):
     return get_accessible_trip_or_404(db, current_user, trip_id)
+
+
+@router.get("/{trip_id}/stops", response_model=list[TripStopItemResponse])
+def list_trip_stops(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    get_accessible_trip_or_404(db, current_user, trip_id)
+    return (
+        db.query(TripStop)
+        .filter(TripStop.trip_id == trip_id)
+        .order_by(TripStop.start_time.asc(), TripStop.id.asc())
+        .all()
+    )
 
 
 @router.patch("/{trip_id}/category", response_model=TripResponse)
@@ -346,6 +365,7 @@ def stop_trip(
     stop_time = datetime.now()
     close_open_vehicle_trips(db, trip.vehicle_id, stop_time, exclude_trip_id=trip.id)
 
+    finalize_open_trip_stop(db, trip.id, end_time=stop_time)
     trip.end_time = stop_time
     trip.status = "finished"
     db.commit()

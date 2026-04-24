@@ -6,6 +6,7 @@ from app.dependencies.auth import get_current_active_user
 from app.models.trip_point import TripPoint
 from app.models.user import User
 from app.schemas.trip_points import TripPointCreate, TripPointResponse
+from app.services.trip_stops import update_trip_stops_for_new_point
 from app.utils.permissions import (
     get_accessible_trip_or_404,
     require_edit_trips,
@@ -23,10 +24,12 @@ def create_trip_point(
     current_user: User = Depends(get_current_active_user),
 ):
     require_edit_trips(current_user)
-    get_accessible_trip_or_404(db, current_user, trip_id)
+    trip = get_accessible_trip_or_404(db, current_user, trip_id)
 
     point = TripPoint(trip_id=trip_id, **point_data.model_dump())
     db.add(point)
+    db.flush()
+    update_trip_stops_for_new_point(db, trip, point)
     db.commit()
     db.refresh(point)
     return point
