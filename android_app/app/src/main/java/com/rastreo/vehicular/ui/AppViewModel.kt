@@ -14,12 +14,15 @@ import com.rastreo.vehicular.data.UserMeResponse
 import com.rastreo.vehicular.data.Vehicle
 import com.rastreo.vehicular.location.LocationRepository
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
@@ -41,6 +44,15 @@ data class UiState(
     val isSessionInvalid: Boolean = false,
     val pendingTripClose: Boolean = false,
     val pendingPointCount: Int = 0,
+    val pendingQueueTripId: Int? = null,
+    val pendingCloseTripId: Int? = null,
+    val lastSyncAttemptAt: String = "Sin intentos",
+    val lastSyncError: String = "Sin error",
+    val queuedPointsUploadedCount: Int = 0,
+    val syncFailureCount: Int = 0,
+    val autoCloseRetryActive: Boolean = false,
+    val autoCloseRetryStatus: String = "Sin cierre pendiente",
+    val autoCloseRetryAttemptCount: Int = 0,
     val lastLocationText: String = "Sin dato",
     val lastAttemptText: String = "Sin intento",
     val lastLocationReadAttemptAt: String = "Sin intento",
@@ -82,8 +94,10 @@ class AppViewModel(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private var trackingJob: Job? = null
+    private var pendingCloseRetryJob: Job? = null
     private var lastAcceptedPoint: AcceptedPoint? = null
     private var distanceMinimumDiscardCountSinceLastAccepted = 0
+    private val pendingCloseSyncMutex = Mutex()
 
     fun bootstrap() {
         viewModelScope.launch {
@@ -134,6 +148,7 @@ class AppViewModel(
                 }
                 refreshPendingSyncUi()
                 syncPendingStateAfterAuthenticatedSession(baseUrl, session.token)
+                ensurePendingCloseRetry()
             } else {
                 val error = restoreResult.exceptionOrNull()
                 if (isUnauthorizedError(error)) {
@@ -252,6 +267,7 @@ class AppViewModel(
                     baseUrl = RastreoRepository.normalizeBaseUrl(baseUrl),
                     token = token,
                 )
+                ensurePendingCloseRetry()
             } else {
                 val error = loginResult.exceptionOrNull()
                 val message = error?.message ?: "No se pudo iniciar sesion."
@@ -271,6 +287,7 @@ class AppViewModel(
     fun logout() {
         viewModelScope.launch {
             trackingJob?.cancel()
+            pendingCloseRetryJob?.cancel()
             lastAcceptedPoint = null
             distanceMinimumDiscardCountSinceLastAccepted = 0
             sessionStore.clearSession()
@@ -285,6 +302,10 @@ class AppViewModel(
                     isSessionInvalid = false,
                     pendingTripClose = pendingSyncState.pendingClose != null,
                     pendingPointCount = pendingSyncState.pendingPoints.size,
+                    pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId,
+                    pendingCloseTripId = pendingSyncState.pendingClose?.tripId,
+                    autoCloseRetryActive = false,
+                    autoCloseRetryStatus = "Sin cierre pendiente",
                     lastLocationText = "Sin dato",
                     lastAttemptText = "Sin intento",
                     lastLocationReadAttemptAt = "Sin intento",
@@ -544,6 +565,7 @@ class AppViewModel(
             if (uiState.value.isSessionInvalid) {
                 savePendingClose(tripId)
                 refreshPendingSyncUi(forceTripId = tripId)
+                ensurePendingCloseRetry()
                 val message = "Sesion expirada. El cierre del recorrido quedo pendiente."
                 _uiState.update {
                     it.copy(
@@ -556,23 +578,54 @@ class AppViewModel(
                 return@launch
             }
 
-            if (pendingSyncStore.hasPendingPointsForTrip(tripId)) {
+            val token = sessionStore.sessionData.first().token
+            val hasPendingCloseForTrip = pendingSyncStore.getState().pendingClose?.tripId == tripId
+            if (pendingSyncStore.hasPendingPointsForTrip(tripId) || hasPendingCloseForTrip) {
                 savePendingClose(tripId)
-                refreshPendingSyncUi(forceTripId = tripId)
-                val message = "Cierre pendiente: primero se deben sincronizar los puntos pendientes."
-                _uiState.update {
-                    it.copy(
-                        isBusy = false,
-                        currentTripId = tripId,
-                        statusMessage = message,
-                        operationMessage = "Cierre pendiente por puntos pendientes.",
-                        lastErrorMessage = message,
-                    )
+                ensurePendingCloseRetry()
+                when (runPendingCloseSyncAttempt(token, uiState.value.baseUrl)) {
+                    SyncResult.SUCCESS -> {
+                        _uiState.update { state ->
+                            state.copy(isBusy = false)
+                        }
+                    }
+
+                    SyncResult.UNAUTHORIZED -> {
+                        markSessionExpired(
+                            statusMessage = "Sesion expirada. El cierre del recorrido quedo pendiente.",
+                            operationMessage = "Cierre pendiente por sesion expirada.",
+                            preserveTripId = tripId,
+                            pendingTripClose = true,
+                            clearUserContext = false,
+                        )
+                    }
+
+                    SyncResult.RETRY_LATER -> {
+                        refreshPendingSyncUi(forceTripId = tripId)
+                        val pointsStillPending = pendingSyncStore.hasPendingPointsForTrip(tripId)
+                        val message = if (pointsStillPending) {
+                            "Cierre pendiente: no se pudieron sincronizar los puntos."
+                        } else {
+                            "Cierre pendiente por problema de conexion."
+                        }
+                        _uiState.update {
+                            it.copy(
+                                isBusy = false,
+                                currentTripId = tripId,
+                                statusMessage = message,
+                                operationMessage = if (pointsStillPending) {
+                                    "Cierre pendiente por puntos pendientes."
+                                } else {
+                                    "Cierre pendiente por conexion."
+                                },
+                                lastErrorMessage = message,
+                            )
+                        }
+                    }
                 }
                 return@launch
             }
 
-            val token = sessionStore.sessionData.first().token
             val stopTripResult = runCatching {
                 repository.stopTrip(uiState.value.baseUrl, token, tripId)
             }
@@ -597,6 +650,7 @@ class AppViewModel(
             } else {
                 val error = stopTripResult.exceptionOrNull()
                 savePendingClose(tripId)
+                ensurePendingCloseRetry()
                 if (isUnauthorizedError(error)) {
                     markSessionExpired(
                         statusMessage = "Sesion expirada. El cierre del recorrido quedo pendiente.",
@@ -653,7 +707,11 @@ class AppViewModel(
             }
 
             val currentInstant = Instant.parse(timestamp)
-            val validation = validateLocationPoint(location, currentInstant)
+            val validation = validateLocationPoint(
+                tripId = tripId,
+                location = location,
+                currentInstant = currentInstant,
+            )
             _uiState.update {
                 it.copy(
                     lastLocationText = "${location.latitude}, ${location.longitude}",
@@ -816,7 +874,7 @@ class AppViewModel(
                                 acceptedAt = currentInstant,
                             )
                             distanceMinimumDiscardCountSinceLastAccepted = 0
-                            trySyncPendingClose(token, uiState.value.baseUrl)
+                            runPendingCloseSyncAttempt(token, uiState.value.baseUrl)
                         } else {
                             val error = sendPointResult.exceptionOrNull()
                             val failedAt = Instant.now().toString()
@@ -881,6 +939,7 @@ class AppViewModel(
         lastLocationText: String? = null,
         incrementSendFailure: Boolean = false,
     ) {
+        pendingCloseRetryJob?.cancel()
         sessionStore.clearSession()
         lastAcceptedPoint = null
         distanceMinimumDiscardCountSinceLastAccepted = 0
@@ -898,6 +957,14 @@ class AppViewModel(
                 isSessionInvalid = true,
                 pendingTripClose = pendingTripClose,
                 pendingPointCount = pendingSyncState.pendingPoints.size,
+                pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId,
+                pendingCloseTripId = pendingSyncState.pendingClose?.tripId,
+                autoCloseRetryActive = false,
+                autoCloseRetryStatus = if (pendingTripClose) {
+                    "Sesion invalida"
+                } else {
+                    "Sin cierre pendiente"
+                },
                 lastLocationText = lastLocationText ?: state.lastLocationText,
                 lastFailedSendAt = failedAt ?: state.lastFailedSendAt,
                 sendFailureCount = if (incrementSendFailure) {
@@ -917,10 +984,12 @@ class AppViewModel(
         forceTripId: Int? = null,
     ) {
         val pendingSyncState = pendingSyncStore.getState()
+        val pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId
+        val pendingCloseTripId = pendingSyncState.pendingClose?.tripId
         val storedTripId = forceTripId
-            ?: pendingSyncState.pendingClose?.tripId
+            ?: pendingCloseTripId
             ?: pendingSyncState.activeTripId
-            ?: pendingSyncState.pendingPoints.firstOrNull()?.tripId
+            ?: pendingQueueTripId
 
         _uiState.update { state ->
             state.copy(
@@ -932,12 +1001,26 @@ class AppViewModel(
                 },
                 pendingTripClose = pendingSyncState.pendingClose != null,
                 pendingPointCount = pendingSyncState.pendingPoints.size,
+                pendingQueueTripId = pendingQueueTripId,
+                pendingCloseTripId = pendingCloseTripId,
+                autoCloseRetryStatus = if (pendingCloseTripId == null &&
+                    pendingCloseRetryJob?.isActive != true
+                ) {
+                    "Sin cierre pendiente"
+                } else {
+                    state.autoCloseRetryStatus
+                },
             )
         }
     }
 
     private suspend fun enqueuePendingPoint(point: PendingTripPointDraft) {
         pendingSyncStore.enqueuePoint(point)
+        updateLastAcceptedPoint(
+            latitude = point.latitude,
+            longitude = point.longitude,
+            timestamp = point.timestamp,
+        )
         refreshPendingSyncUi(forceTripId = point.tripId)
     }
 
@@ -960,8 +1043,10 @@ class AppViewModel(
             ?: pendingSyncState.pendingPoints.firstOrNull()?.tripId
             ?: return
 
+        recordSyncAttempt()
+
         when (syncPendingPointsForTrip(tripId, token, baseUrl)) {
-            SyncResult.SUCCESS -> trySyncPendingClose(token, baseUrl)
+            SyncResult.SUCCESS -> runPendingCloseSyncAttempt(token, baseUrl)
             SyncResult.UNAUTHORIZED -> {
                 val hasPendingClose = pendingSyncStore.getState().pendingClose != null
                 markSessionExpired(
@@ -976,6 +1061,36 @@ class AppViewModel(
         }
     }
 
+    private suspend fun runPendingCloseSyncAttempt(
+        token: String,
+        baseUrl: String,
+    ): SyncResult {
+        return pendingCloseSyncMutex.withLock {
+            _uiState.update { state ->
+                state.copy(
+                    autoCloseRetryStatus = "Intentando sync",
+                    autoCloseRetryAttemptCount = state.autoCloseRetryAttemptCount + 1,
+                )
+            }
+            val result = trySyncPendingClose(token, baseUrl)
+            _uiState.update { state ->
+                state.copy(
+                    autoCloseRetryActive = when (result) {
+                        SyncResult.SUCCESS -> false
+                        SyncResult.RETRY_LATER -> true
+                        SyncResult.UNAUTHORIZED -> false
+                    },
+                    autoCloseRetryStatus = when (result) {
+                        SyncResult.SUCCESS -> "Cierre completado"
+                        SyncResult.RETRY_LATER -> "Retry later"
+                        SyncResult.UNAUTHORIZED -> "Unauthorized"
+                    },
+                )
+            }
+            result
+        }
+    }
+
     private suspend fun syncPendingPointsForTrip(
         tripId: Int,
         token: String,
@@ -986,6 +1101,7 @@ class AppViewModel(
             return SyncResult.SUCCESS
         }
 
+        recordSyncAttempt()
         _uiState.update {
             it.copy(operationMessage = "Sincronizando puntos pendientes.")
         }
@@ -1008,9 +1124,25 @@ class AppViewModel(
 
             if (syncResult.isSuccess) {
                 pendingSyncStore.removePoint(point.sequence)
+                updateLastAcceptedPoint(
+                    latitude = point.latitude,
+                    longitude = point.longitude,
+                    timestamp = point.timestamp,
+                )
+                recordQueuedPointUploaded()
+                clearSyncError()
                 refreshPendingSyncUi(forceTripId = tripId)
             } else {
                 val error = syncResult.exceptionOrNull()
+                recordSyncFailure(
+                    if (isUnauthorizedError(error)) {
+                        "Sesion expirada durante sincronizacion."
+                    } else if (isNetworkError(error)) {
+                        "No se pudieron sincronizar puntos por problema de conexion."
+                    } else {
+                        error?.message ?: "No se pudieron sincronizar puntos pendientes."
+                    }
+                )
                 return if (isUnauthorizedError(error)) {
                     SyncResult.UNAUTHORIZED
                 } else {
@@ -1028,6 +1160,8 @@ class AppViewModel(
     ): SyncResult {
         val pendingClose = pendingSyncStore.getState().pendingClose ?: return SyncResult.SUCCESS
         val tripId = pendingClose.tripId
+
+        recordSyncAttempt()
 
         when (syncPendingPointsForTrip(tripId, token, baseUrl)) {
             SyncResult.UNAUTHORIZED -> return SyncResult.UNAUTHORIZED
@@ -1049,20 +1183,34 @@ class AppViewModel(
             pendingSyncStore.setActiveTripId(null)
             lastAcceptedPoint = null
             distanceMinimumDiscardCountSinceLastAccepted = 0
+            clearSyncError()
             refreshPendingSyncUi(preserveCurrentTripId = false)
             _uiState.update { state ->
                 state.copy(
+                    isBusy = false,
                     currentTripId = null,
                     pendingTripClose = false,
-                    statusMessage = "Cierre pendiente sincronizado correctamente.",
-                    operationMessage = "Cierre pendiente sincronizado.",
+                    autoCloseRetryActive = false,
+                    autoCloseRetryStatus = "Cierre completado",
+                    statusMessage = "Recorrido cerrado correctamente.",
+                    operationMessage = "Recorrido cerrado.",
                     lastErrorMessage = "",
                 )
             }
             return SyncResult.SUCCESS
         }
 
-        return if (isUnauthorizedError(stopTripResult.exceptionOrNull())) {
+        val stopError = stopTripResult.exceptionOrNull()
+        recordSyncFailure(
+            if (isUnauthorizedError(stopError)) {
+                "Sesion expirada al sincronizar cierre pendiente."
+            } else if (isNetworkError(stopError)) {
+                "No se pudo sincronizar el cierre pendiente por problema de conexion."
+            } else {
+                stopError?.message ?: "No se pudo sincronizar el cierre pendiente."
+            }
+        )
+        return if (isUnauthorizedError(stopError)) {
             SyncResult.UNAUTHORIZED
         } else {
             refreshPendingSyncUi(forceTripId = tripId)
@@ -1070,17 +1218,173 @@ class AppViewModel(
         }
     }
 
+    private fun ensurePendingCloseRetry() {
+        if (pendingCloseRetryJob?.isActive == true) {
+            _uiState.update { state ->
+                state.copy(
+                    autoCloseRetryActive = true,
+                    autoCloseRetryStatus = "Auto cierre activo",
+                )
+            }
+            return
+        }
+
+        _uiState.update { state ->
+            state.copy(
+                autoCloseRetryActive = true,
+                autoCloseRetryStatus = "Auto cierre activo",
+            )
+        }
+        pendingCloseRetryJob = viewModelScope.launch {
+            while (true) {
+                val pendingClose = pendingSyncStore.getState().pendingClose
+                val session = sessionStore.sessionData.first()
+                val currentState = uiState.value
+
+                if (pendingClose == null || currentState.isSessionInvalid || session.token.isBlank()) {
+                    _uiState.update { state ->
+                        state.copy(
+                            autoCloseRetryActive = false,
+                            autoCloseRetryStatus = when {
+                                pendingClose == null -> "Sin cierre pendiente"
+                                currentState.isSessionInvalid -> "Sesion invalida"
+                                session.token.isBlank() -> "Sin token"
+                                else -> state.autoCloseRetryStatus
+                            },
+                        )
+                    }
+                    break
+                }
+
+                if (currentState.isTracking) {
+                    _uiState.update { state ->
+                        state.copy(
+                            autoCloseRetryActive = true,
+                            autoCloseRetryStatus = "Tracking activo",
+                        )
+                    }
+                    delay(PENDING_CLOSE_RETRY_INTERVAL_MS)
+                    continue
+                }
+
+                if (currentState.isBusy) {
+                    _uiState.update { state ->
+                        state.copy(
+                            autoCloseRetryActive = true,
+                            autoCloseRetryStatus = "App ocupada",
+                        )
+                    }
+                    delay(PENDING_CLOSE_RETRY_INTERVAL_MS)
+                    continue
+                }
+
+                _uiState.update { state ->
+                    state.copy(
+                        operationMessage = "Reintentando cierre pendiente.",
+                        autoCloseRetryActive = true,
+                        autoCloseRetryStatus = "Intentando sync",
+                    )
+                }
+
+                when (
+                    runPendingCloseSyncAttempt(
+                        token = session.token,
+                        baseUrl = currentState.baseUrl,
+                    )
+                ) {
+                    SyncResult.SUCCESS -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                autoCloseRetryActive = false,
+                                autoCloseRetryStatus = "Cierre completado",
+                            )
+                        }
+                        break
+                    }
+                    SyncResult.UNAUTHORIZED -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                autoCloseRetryActive = false,
+                                autoCloseRetryStatus = "Unauthorized",
+                            )
+                        }
+                        val hasPendingClose = pendingSyncStore.getState().pendingClose != null
+                        markSessionExpired(
+                            statusMessage = "Sesion expirada. El cierre del recorrido quedo pendiente.",
+                            operationMessage = "Cierre pendiente por sesion expirada.",
+                            preserveTripId = pendingClose.tripId,
+                            pendingTripClose = hasPendingClose,
+                            clearUserContext = false,
+                        )
+                        break
+                    }
+                    SyncResult.RETRY_LATER -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                autoCloseRetryActive = true,
+                                autoCloseRetryStatus = "Retry later",
+                            )
+                        }
+                        delay(PENDING_CLOSE_RETRY_INTERVAL_MS)
+                    }
+                }
+            }
+
+            pendingCloseRetryJob = null
+        }
+    }
+
+    override fun onCleared() {
+        trackingJob?.cancel()
+        pendingCloseRetryJob?.cancel()
+        _uiState.update { state ->
+            state.copy(
+                autoCloseRetryActive = false,
+                autoCloseRetryStatus = "Sin cierre pendiente",
+            )
+        }
+        super.onCleared()
+    }
+
+    private fun recordSyncAttempt(at: String = Instant.now().toString()) {
+        _uiState.update { state ->
+            state.copy(lastSyncAttemptAt = at)
+        }
+    }
+
+    private fun recordSyncFailure(message: String) {
+        _uiState.update { state ->
+            state.copy(
+                lastSyncError = message,
+                syncFailureCount = state.syncFailureCount + 1,
+            )
+        }
+    }
+
+    private fun clearSyncError() {
+        _uiState.update { state ->
+            state.copy(lastSyncError = "Sin error")
+        }
+    }
+
+    private fun recordQueuedPointUploaded() {
+        _uiState.update { state ->
+            state.copy(queuedPointsUploadedCount = state.queuedPointsUploadedCount + 1)
+        }
+    }
+
     private fun chooseVehicle(visibleVehicleIds: List<Int>, vehicles: List<Vehicle>): Int? {
         return vehicles.firstOrNull { it.id in visibleVehicleIds }?.id ?: vehicles.firstOrNull()?.id
     }
 
-    private fun validateLocationPoint(
+    private suspend fun validateLocationPoint(
+        tripId: Int,
         location: com.rastreo.vehicular.location.LocationSample,
         currentInstant: Instant,
     ): PointValidation {
         val accuracy = location.accuracy
         val requiredDistance = accuracy?.times(2)?.toDouble()
-        val previous = lastAcceptedPoint ?: return PointValidation(
+        val previous = getLocalAcceptedPoint(tripId) ?: return PointValidation(
             isAccepted = accuracy == null || accuracy <= MAX_ACCEPTED_ACCURACY_METERS,
             discardReason = if (accuracy != null && accuracy > MAX_ACCEPTED_ACCURACY_METERS) {
                 "Descartado por precision."
@@ -1141,6 +1445,25 @@ class AppViewModel(
         }
     }
 
+    private suspend fun getLocalAcceptedPoint(tripId: Int): AcceptedPoint? {
+        val pendingPoint = pendingSyncStore.getLastPendingPointForTrip(tripId)
+        return pendingPoint?.toAcceptedPoint() ?: lastAcceptedPoint
+    }
+
+    private fun updateLastAcceptedPoint(
+        latitude: Double,
+        longitude: Double,
+        timestamp: String,
+    ) {
+        val acceptedAt = runCatching { Instant.parse(timestamp) }.getOrNull() ?: return
+        lastAcceptedPoint = AcceptedPoint(
+            latitude = latitude,
+            longitude = longitude,
+            acceptedAt = acceptedAt,
+        )
+        distanceMinimumDiscardCountSinceLastAccepted = 0
+    }
+
     private fun distanceMeters(
         startLatitude: Double,
         startLongitude: Double,
@@ -1172,6 +1495,15 @@ class AppViewModel(
         val acceptedAt: Instant,
     )
 
+    private fun com.rastreo.vehicular.data.PendingTripPoint.toAcceptedPoint(): AcceptedPoint? {
+        val acceptedAt = runCatching { Instant.parse(timestamp) }.getOrNull() ?: return null
+        return AcceptedPoint(
+            latitude = latitude,
+            longitude = longitude,
+            acceptedAt = acceptedAt,
+        )
+    }
+
     private data class PointValidation(
         val isAccepted: Boolean,
         val discardReason: String?,
@@ -1198,6 +1530,7 @@ class AppViewModel(
         private const val MIN_SECONDS_BETWEEN_ACCEPTED_POINTS = 5L
         private const val PERMANENCE_POINT_SECONDS = 120L
         private const val MIN_DISTANCE_DISCARDS_FOR_PERMANENCE = 2
+        private const val PENDING_CLOSE_RETRY_INTERVAL_MS = 15_000L
     }
 }
 

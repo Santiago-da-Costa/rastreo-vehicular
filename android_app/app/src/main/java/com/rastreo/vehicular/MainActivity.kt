@@ -181,9 +181,30 @@ private fun DiagnosticsCard(state: UiState) {
             DiagnosticRow("Trip ID", state.currentTripId?.toString() ?: "sin iniciar")
             DiagnosticRow("Puntos pendientes", state.pendingPointCount.toString())
             DiagnosticRow(
+                "Trip con cola pendiente",
+                state.pendingQueueTripId?.toString() ?: "ninguno",
+            )
+            DiagnosticRow(
                 "Cierre de recorrido pendiente",
                 if (state.pendingTripClose) "si" else "no",
             )
+            DiagnosticRow(
+                "Trip de cierre pendiente",
+                state.pendingCloseTripId?.toString() ?: "ninguno",
+            )
+            DiagnosticRow("Ultimo intento de sync", state.lastSyncAttemptAt)
+            DiagnosticRow("Ultimo error de sync", state.lastSyncError)
+            DiagnosticRow(
+                "Puntos subidos desde cola",
+                state.queuedPointsUploadedCount.toString(),
+            )
+            DiagnosticRow("Fallos de sync", state.syncFailureCount.toString())
+            DiagnosticRow(
+                "Auto cierre activo",
+                if (state.autoCloseRetryActive) "si" else "no",
+            )
+            DiagnosticRow("Ultimo resultado auto cierre", state.autoCloseRetryStatus)
+            DiagnosticRow("Intentos auto cierre", state.autoCloseRetryAttemptCount.toString())
             DiagnosticRow("Categoria", state.category.ifBlank { "sin categoria" })
 
             Text("Tracking", fontWeight = FontWeight.Bold)

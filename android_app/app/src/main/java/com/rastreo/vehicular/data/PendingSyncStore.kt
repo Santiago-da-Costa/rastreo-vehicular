@@ -121,6 +121,10 @@ class PendingSyncStore(private val context: Context) {
             .sortedPendingPoints()
     }
 
+    suspend fun getLastPendingPointForTrip(tripId: Int): PendingTripPoint? {
+        return getPendingPointsForTrip(tripId).lastOrNull()
+    }
+
     suspend fun hasPendingPointsForTrip(tripId: Int): Boolean {
         return getState().pendingPoints.any { it.tripId == tripId }
     }
