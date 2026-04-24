@@ -150,10 +150,12 @@ def update_trip_stops_for_new_point(
 def finalize_open_trip_stop(
     db: Session,
     trip_id: int,
+    end_time: datetime | None = None,
     stop_time: datetime | None = None,
 ) -> None:
     open_trip_stop = _get_open_trip_stop(db, trip_id)
     if open_trip_stop is None:
         return
 
-    _close_trip_stop(open_trip_stop, end_time=stop_time)
+    effective_end_time = end_time if end_time is not None else stop_time
+    _close_trip_stop(open_trip_stop, end_time=effective_end_time)
