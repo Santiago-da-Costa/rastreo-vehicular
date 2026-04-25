@@ -1928,6 +1928,7 @@
         let allVehiclesCache = [];
         let currentTripId = null;
         let currentRouteSegments = [];
+        let currentTripSummaries = [];
         let currentTripsWithPoints = [];
         let currentMode = "all";
         let selectedTripId = null;
@@ -1949,6 +1950,13 @@
         let pendingCategoryTripId = null;
         let dataLoadVersion = 0;
         let tripStopsRequestVersion = 0;
+        let tripLoadDiagnostics = {
+            summariesStartedAt: 0,
+            summariesDurationMs: 0,
+            tripCount: 0,
+            pointsRequestCount: 0,
+            totalPointsDownloaded: 0
+        };
         let currentUser = null;
         let currentView = "tracking";
         let isSidebarOpen = false;
@@ -3536,15 +3544,16 @@
 
         function renderTripsList() {
             const selectedValue = selectedTripId == null ? "" : String(selectedTripId);
+            const tripItems = currentTripsWithPoints.length ? currentTripsWithPoints : currentTripSummaries;
             tripSelect.innerHTML = '<option value="">Ver todos</option>';
 
-            if (!currentTripsWithPoints.length) {
+            if (!tripItems.length) {
                 tripSelect.disabled = true;
                 return;
             }
 
             tripSelect.disabled = false;
-            currentTripsWithPoints.forEach(({ trip }) => {
+            tripItems.forEach(({ trip }) => {
                 const option = document.createElement("option");
 
                 option.value = trip.id;
@@ -4225,6 +4234,96 @@
             }
 
             return response.json();
+        }
+
+        function resetTripLoadDiagnostics() {
+            tripLoadDiagnostics = {
+                summariesStartedAt: performance.now(),
+                summariesDurationMs: 0,
+                tripCount: 0,
+                pointsRequestCount: 0,
+                totalPointsDownloaded: 0
+            };
+        }
+
+        function logTripLoadDiagnostics(label, extra = {}) {
+            console.debug("[trip_map]", label, {
+                summariesDurationMs: Math.round(tripLoadDiagnostics.summariesDurationMs),
+                tripCount: tripLoadDiagnostics.tripCount,
+                pointsRequestCount: tripLoadDiagnostics.pointsRequestCount,
+                totalPointsDownloaded: tripLoadDiagnostics.totalPointsDownloaded,
+                ...extra
+            });
+        }
+
+        function sortTripsByStartTime(trips = []) {
+            return [...trips].sort((a, b) => {
+                const timeA = new Date(getTripStartTime(a)).getTime();
+                const timeB = new Date(getTripStartTime(b)).getTime();
+
+                if (Number.isNaN(timeA) || Number.isNaN(timeB)) {
+                    return 0;
+                }
+
+                return timeA - timeB;
+            });
+        }
+
+        function setCurrentTripSummaries(trips = []) {
+            currentTripSummaries = trips.map((trip) => ({ trip }));
+        }
+
+        function clearCurrentTripSummaries() {
+            currentTripSummaries = [];
+        }
+
+        async function loadTripSummariesForFilters() {
+            resetTripLoadDiagnostics();
+
+            const range = getFilterRange();
+            const [trips, vehicles] = await Promise.all([
+                fetchTrips(),
+                fetchVehicles().catch(() => allVehiclesCache)
+            ]);
+
+            allTripsCache = trips;
+            allVehiclesCache = vehicles;
+            populateVehicleSelect(allTripsCache);
+            populateManualVehicleSelect(allVehiclesCache, allTripsCache);
+            renderLiveVehiclePositions();
+
+            const filteredTrips = sortTripsByStartTime(trips).filter((trip) => {
+                return tripMatchesActiveFilters(trip, range);
+            });
+
+            setCurrentTripSummaries(filteredTrips);
+            tripLoadDiagnostics.summariesDurationMs = performance.now() - tripLoadDiagnostics.summariesStartedAt;
+            tripLoadDiagnostics.tripCount = filteredTrips.length;
+            logTripLoadDiagnostics("trip summaries loaded");
+
+            return {
+                range,
+                trips,
+                vehicles,
+                filteredTrips
+            };
+        }
+
+        async function loadTripPointsForSelection(trips = []) {
+            const tripsWithPoints = await Promise.all(
+                trips.map(async (trip) => {
+                    const points = await fetchTripPoints(trip.id);
+                    tripLoadDiagnostics.pointsRequestCount += 1;
+                    tripLoadDiagnostics.totalPointsDownloaded += Array.isArray(points) ? points.length : 0;
+                    return { trip, points };
+                })
+            );
+
+            logTripLoadDiagnostics("trip points loaded", {
+                selectionTripCount: trips.length
+            });
+
+            return tripsWithPoints;
         }
 
         async function parseErrorDetail(response) {
@@ -5178,6 +5277,7 @@
             }));
             currentPoints = orderedPoints;
             currentTrips = [];
+            setCurrentTripSummaries(tripForPoints ? [tripForPoints] : []);
             currentTripsWithPoints = tripForPoints ? [{ trip: tripForPoints, points: orderedPoints }] : [];
             currentRouteSegments = [orderedPoints];
             if (selectedTripId != null && !getSelectedTripItem()) {
@@ -5215,6 +5315,7 @@
             currentTrip = null;
             currentTripId = null;
             currentTrips = tripsWithPoints.map((item) => item.trip);
+            setCurrentTripSummaries(currentTrips);
             currentTripsWithPoints = [];
             currentRouteSegments = [];
             currentPoints = [];
@@ -5538,10 +5639,11 @@
             const loadVersion = beginDataLoad();
 
             try {
-                const [points, trip] = await Promise.all([
-                    fetchTripPoints(tripId),
-                    fetchTripById(tripId).catch(() => null)
+                const [trip, tripsWithPoints] = await Promise.all([
+                    fetchTripById(tripId).catch(() => null),
+                    loadTripPointsForSelection([{ id: tripId }])
                 ]);
+                const points = tripsWithPoints[0] ? tripsWithPoints[0].points : [];
 
                 if (isStaleDataLoad(loadVersion)) {
                     return;
@@ -5561,6 +5663,7 @@
                 if (!points.length) {
                     currentPoints = [];
                     currentTrips = [];
+                    setCurrentTripSummaries(currentTrip ? [currentTrip] : []);
                     currentTripsWithPoints = [];
                     currentRouteSegments = [];
                     selectedTripId = null;
@@ -5588,6 +5691,7 @@
                 }
 
                 currentPoints = [];
+                clearCurrentTripSummaries();
                 currentTripsWithPoints = [];
                 selectedTripId = null;
                 isCategoryEditMode = false;
@@ -5655,43 +5759,14 @@
             const loadVersion = beginDataLoad();
 
             try {
-                const range = getFilterRange();
-                const [trips, vehicles] = await Promise.all([
-                    fetchTrips(),
-                    fetchVehicles().catch(() => allVehiclesCache)
-                ]);
+                const { filteredTrips } = await loadTripSummariesForFilters();
                 if (isStaleDataLoad(loadVersion)) {
                     return;
                 }
                 if (!showMessages && preserveOnError && !canAutoRefreshNow()) {
                     return;
                 }
-                allTripsCache = trips;
-                allVehiclesCache = vehicles;
-                populateVehicleSelect(allTripsCache);
-                populateManualVehicleSelect(allVehiclesCache, allTripsCache);
-                renderLiveVehiclePositions();
-                const orderedTrips = [...trips].sort((a, b) => {
-                    const timeA = new Date(getTripStartTime(a)).getTime();
-                    const timeB = new Date(getTripStartTime(b)).getTime();
-
-                    if (Number.isNaN(timeA) || Number.isNaN(timeB)) {
-                        return 0;
-                    }
-
-                    return timeA - timeB;
-                });
-                const filteredTrips = orderedTrips.filter((trip) => {
-                    return tripMatchesActiveFilters(trip, range);
-                });
-                const tripsWithPoints = await Promise.all(
-                    filteredTrips.map(async (trip) => {
-                        return {
-                            trip,
-                            points: await fetchTripPoints(trip.id)
-                        };
-                    })
-                );
+                const tripsWithPoints = await loadTripPointsForSelection(filteredTrips);
 
                 if (isStaleDataLoad(loadVersion)) {
                     return;
@@ -5719,6 +5794,7 @@
                 currentTrips = [];
                 currentTripId = null;
                 currentRouteSegments = [];
+                clearCurrentTripSummaries();
                 currentTripsWithPoints = [];
                 selectedTripId = null;
                 isCategoryEditMode = false;
