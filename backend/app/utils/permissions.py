@@ -37,7 +37,7 @@ def get_permissions_for_role(role: str) -> dict[str, bool]:
             "manage_users": False,
             "manage_vehicles": False,
             "view_all_vehicles": False,
-            "edit_trips": False,
+            "edit_trips": True,
             "delete_trips": False,
             "view_debug_panel": False,
         },

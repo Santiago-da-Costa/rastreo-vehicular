@@ -203,7 +203,7 @@ private fun AppScreen(
                 onStopTracking = onStopTracking,
                 onRefreshVehicles = onRefreshVehicles,
             )
-            StatusCard(state = state)
+            OperationalStatusCard(state = state)
             if (canViewDebugPanel) {
                 DeveloperDiagnosticsCard(
                     state = state,
@@ -278,42 +278,51 @@ private fun TripSummaryCard(state: UiState) {
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
-
-            SummarySection(
-                title = "Posiciones registradas",
-                lines = listOf(
-                    "Aceptadas o enviadas: ${state.sendSuccessCount}",
-                    "Lat: ${formatCoordinate(state.lastAcceptedLatitude)}",
-                    "Long: ${formatCoordinate(state.lastAcceptedLongitude)}",
-                    "Precision: ${formatAccuracy(state.lastAcceptedAccuracy)}",
-                ),
+            SummaryValueRow(
+                label = "Posiciones registradas",
+                value = state.sendSuccessCount.toString(),
             )
-            SummarySection(
-                title = "Inicio",
-                lines = listOf("Fecha y hora: ${formatTimestamp(state.trackingStartedAt)}"),
+            SummaryValueRow(
+                label = "Ultima latitud",
+                value = formatCoordinate(state.lastAcceptedLatitude),
+                show = state.lastAcceptedLatitude != null,
             )
-            SummarySection(
-                title = "Categoria",
-                lines = listOf(state.category.ifBlank { "Sin categoria" }),
+            SummaryValueRow(
+                label = "Ultima longitud",
+                value = formatCoordinate(state.lastAcceptedLongitude),
+                show = state.lastAcceptedLongitude != null,
             )
-            SummarySection(
-                title = "Velocidad actual",
-                lines = listOf(formatSpeed(state.lastSpeed)),
+            SummaryValueRow(
+                label = "Precision del ultimo punto",
+                value = formatAccuracy(state.lastAcceptedAccuracy),
+                show = state.lastAcceptedAccuracy != null,
+            )
+            SummaryValueRow(
+                label = "Inicio",
+                value = formatTimestamp(state.trackingStartedAt),
+            )
+            SummaryValueRow(
+                label = "Categoria",
+                value = state.category.ifBlank { "Sin categoria" },
+            )
+            SummaryValueRow(
+                label = "Velocidad actual",
+                value = formatSpeed(state.lastSpeed),
             )
         }
     }
 }
 
 @Composable
-private fun SummarySection(
-    title: String,
-    lines: List<String>,
+private fun SummaryValueRow(
+    label: String,
+    value: String,
+    show: Boolean = true,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        lines.forEach { line ->
-            Text(line, style = MaterialTheme.typography.bodyMedium)
-        }
+    if (!show) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -448,8 +457,8 @@ private fun MainControlsCard(
                     Text("Recargar vehiculos")
                 }
                 Text(
-                    text = if (userCanTrack) {
-                        "Permiso de tracking habilitado."
+                    text = if (userCanTrack || isTrackingActive) {
+                        buildSelectionHint(state)
                     } else {
                         "Este usuario no tiene permiso para iniciar recorridos."
                     },
@@ -461,17 +470,18 @@ private fun MainControlsCard(
 }
 
 @Composable
-private fun StatusCard(state: UiState) {
+private fun OperationalStatusCard(state: UiState) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Estado", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("Trip actual: ${state.currentTripId?.toString() ?: "Sin iniciar"}")
-            Text("Ultima ubicacion: ${state.lastLocationText}")
-            Text("Ultimo intento: ${state.lastAttemptText}")
-            StatusText(state.statusMessage)
+            Text(
+                "Mensajes operativos",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            StatusText(resolveOperationalMessage(state))
         }
     }
 }
@@ -570,6 +580,19 @@ private fun DeveloperDiagnosticsCard(
                     "Ultimo mensaje operativo: ${state.operationMessage.ifBlank { "Sin dato" }}",
                 ),
             )
+        }
+    }
+}
+
+@Composable
+private fun SummarySection(
+    title: String,
+    lines: List<String>,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        lines.forEach { line ->
+            Text(line, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -766,6 +789,82 @@ private fun formatRequiredDistance(state: UiState): String {
 
 private fun formatBoolean(value: Boolean): String {
     return if (value) "si" else "no"
+}
+
+private fun buildSelectionHint(state: UiState): String {
+    return when {
+        state.currentTripId != null -> "Recorrido en curso."
+        state.selectedVehicleId == null && state.category.isBlank() -> "Seleccione vehiculo y categoria."
+        state.selectedVehicleId == null -> "Seleccione un vehiculo."
+        state.category.isBlank() -> "Seleccione una categoria."
+        else -> "Listo para iniciar el recorrido."
+    }
+}
+
+private fun resolveOperationalMessage(state: UiState): String {
+    val statusMessage = state.statusMessage.trim()
+    val lastErrorMessage = state.lastErrorMessage.trim()
+
+    if (state.isSessionInvalid) {
+        return "Sesion expirada. Inicie sesion nuevamente."
+    }
+    if (state.isBusy) {
+        return if (state.currentTripId != null && !state.isTracking) {
+            "Deteniendo recorrido..."
+        } else {
+            "Iniciando recorrido..."
+        }
+    }
+    if (lastErrorMessage.isNotBlank()) {
+        return simplifyOperationalMessage(lastErrorMessage)
+    }
+    if (statusMessage.contains("Recorrido cerrado", ignoreCase = true)) {
+        return "Recorrido detenido."
+    }
+    if (
+        statusMessage.contains("trip", ignoreCase = true) &&
+        statusMessage.contains("iniciado", ignoreCase = true)
+    ) {
+        return "Recorrido iniciado."
+    }
+    if (state.currentTripId != null) {
+        return "Recorrido iniciado."
+    }
+    if (statusMessage.contains("Sesion restaurada", ignoreCase = true)) {
+        return buildSelectionHint(state)
+    }
+    return simplifyOperationalMessage(statusMessage.ifBlank { buildSelectionHint(state) })
+}
+
+private fun simplifyOperationalMessage(message: String): String {
+    if (message.isBlank()) {
+        return "Seleccione vehiculo y categoria."
+    }
+    return when {
+        message.contains("conexion", ignoreCase = true) ->
+            "Problema de conexion. Intente nuevamente."
+        message.contains("sesion expirada", ignoreCase = true) ->
+            "Sesion expirada. Inicie sesion nuevamente."
+        message.contains("sesion no iniciada", ignoreCase = true) ->
+            "Inicie sesion para continuar."
+        message.contains("tracking para este usuario", ignoreCase = true) ||
+            message.contains("no tiene permiso", ignoreCase = true) ->
+            "Este usuario no tiene permiso para iniciar recorridos."
+        message.contains("vehiculo", ignoreCase = true) &&
+            message.contains("categoria", ignoreCase = true) ->
+            "Seleccione vehiculo y categoria."
+        message.contains("vehiculo", ignoreCase = true) ->
+            "Seleccione un vehiculo."
+        message.contains("categoria", ignoreCase = true) ->
+            "Seleccione una categoria."
+        message.contains("cierre pendiente", ignoreCase = true) ->
+            "El recorrido se detuvo y queda pendiente la sincronizacion."
+        message.contains("base url", ignoreCase = true) ->
+            "Configuracion actualizada."
+        message.contains("login", ignoreCase = true) ->
+            "Complete sus credenciales para continuar."
+        else -> message
+    }
 }
 
 private fun formatTimestamp(timestamp: String): String {
