@@ -700,7 +700,8 @@
         }
 
         .trip-filter-form {
-            display: contents;
+            display: grid;
+            gap: 12px;
             margin: 0;
         }
 
@@ -714,6 +715,36 @@
         .control-group:last-child {
             border-bottom: 0;
             padding-bottom: 0;
+        }
+
+        .selection-filter-card {
+            gap: 12px;
+        }
+
+        .selection-filter-card .control-group {
+            gap: 10px;
+        }
+
+        .selection-filter-card .control-group-title,
+        .selection-filter-card .date-filter-status,
+        .selection-filter-card #load-all-button {
+            display: none;
+        }
+
+        .selection-filter-card .date-filter-section.pending {
+            border-color: transparent;
+        }
+
+        .selection-filter-card .date-filter-actions {
+            display: none !important;
+        }
+
+        .selection-filter-card .field {
+            gap: 5px;
+        }
+
+        .selection-apply-button {
+            margin-top: 4px;
         }
 
         .accordion-list {
@@ -1346,19 +1377,19 @@
                     <div class="field hidden-control" id="tracking-user-filter-field">
                         <label for="tracking-user-select">Usuario</label>
                         <select id="tracking-user-select" name="tracking-user-select">
-                            <option value="">Ver todos</option>
+                            <option value="">Todos</option>
                         </select>
                     </div>
                     <div class="field">
                         <label for="vehicle-select">Vehículo</label>
                         <select id="vehicle-select" name="vehicle-select">
-                            <option value="">Ver todos</option>
+                            <option value="">Todos</option>
                         </select>
                     </div>
                     <div class="field">
                         <label for="category-filter-select">Categoría</label>
                         <select id="category-filter-select" name="category-filter-select">
-                            <option value="">Ver todas</option>
+                            <option value="">Todas</option>
                             <option value="trabajo">Trabajo</option>
                             <option value="ocio">Ocio</option>
                             <option value="personal">Personal</option>
@@ -1391,9 +1422,10 @@
                     <div class="field">
                         <label for="trip-select">Recorrido</label>
                         <select id="trip-select" name="trip-select">
-                            <option value="">Ver todos</option>
+                            <option value="">Todos</option>
                         </select>
                     </div>
+                    <button id="apply-filters-button" class="selection-apply-button" type="button">Aplicar filtros</button>
                     <input id="trip-id" class="hidden-control" name="trip-id" type="number" min="1">
                     <button id="load-button" class="hidden-control" type="submit">Cargar recorrido</button>
                     <button id="load-trip-button" class="hidden-control" type="button">Cargar datos del trip</button>
@@ -1722,17 +1754,19 @@
             const managementPanel = managementItem.querySelector(".accordion-panel");
             const designPanel = designItem.querySelector(".accordion-panel");
 
-            [vehicleSectionElement, dateSectionElement, tripListSectionElement].forEach((element) => {
-                if (element) {
-                    element.classList.add("control-card");
-                    if (tripFormElement) {
+            if (tripFormElement) {
+                const selectionFilterCard = document.createElement("section");
+                selectionFilterCard.className = "control-card selection-filter-card";
+
+                [vehicleSectionElement, dateSectionElement, tripListSectionElement].forEach((element) => {
+                    if (element) {
+                        element.classList.add("selection-filter-section");
                         tripFormElement.appendChild(element);
                     }
-                }
-            });
+                });
 
-            if (tripFormElement) {
-                selectionPanel.appendChild(tripFormElement);
+                selectionFilterCard.appendChild(tripFormElement);
+                selectionPanel.appendChild(selectionFilterCard);
             }
 
             [liveSectionElement, replaySectionElement].forEach((element) => {
@@ -1801,6 +1835,7 @@
         const cancelDateFilterButton = document.getElementById("cancel-date-filter-button");
         const clearFilterButton = document.getElementById("clear-filter-button");
         const loadAllButton = document.getElementById("load-all-button");
+        const applyFiltersButton = document.getElementById("apply-filters-button");
         const tripSelect = document.getElementById("trip-select");
         const tripIdInput = document.getElementById("trip-id");
         const loadButton = document.getElementById("load-button");
@@ -2232,6 +2267,8 @@
                         ? "Vehiculo fijado"
                         : selectedItem
                             ? "Recorrido cargado"
+                            : selectedTripId != null
+                                ? "Recorrido listo"
                             : "Vista general";
 
             trackingSummaryVehicle.textContent = selectedVehicleId
@@ -3005,13 +3042,13 @@
             trackingUserFilterField.classList.toggle("hidden-control", !canFilterByUser);
 
             if (!canFilterByUser) {
-                trackingUserSelect.innerHTML = '<option value="">Ver todos</option>';
+                trackingUserSelect.innerHTML = '<option value="">Todos</option>';
                 trackingUserSelect.value = "";
                 return;
             }
 
             const selectedUserId = trackingUserSelect.value;
-            trackingUserSelect.innerHTML = '<option value="">Ver todos</option>';
+            trackingUserSelect.innerHTML = '<option value="">Todos</option>';
 
             adminUsersCache.forEach((user) => {
                 const option = document.createElement("option");
@@ -3431,7 +3468,7 @@
             const vehicleIds = [...new Set(trips.map(getTripVehicleId).filter((value) => value != null && value !== ""))]
                 .sort((a, b) => String(a).localeCompare(String(b), "es", { numeric: true }));
 
-            vehicleSelect.innerHTML = '<option value="">Ver todos</option>';
+            vehicleSelect.innerHTML = '<option value="">Todos</option>';
             vehicleIds.forEach((vehicleId) => {
                 const option = document.createElement("option");
                 option.value = vehicleId;
@@ -3489,7 +3526,7 @@
             const vehiclesList = [...vehiclesById.values()]
                 .sort((a, b) => String(a.id).localeCompare(String(b.id), "es", { numeric: true }));
 
-            vehicleSelect.innerHTML = '<option value="">Ver todos</option>';
+            vehicleSelect.innerHTML = '<option value="">Todos</option>';
             vehiclesList.forEach((vehicle) => {
                 const option = document.createElement("option");
                 option.value = vehicle.id;
@@ -3556,7 +3593,7 @@
         function renderTripsList() {
             const selectedValue = selectedTripId == null ? "" : String(selectedTripId);
             const tripItems = currentTripSummaries.length ? currentTripSummaries : currentTripsWithPoints;
-            tripSelect.innerHTML = '<option value="">Ver todos</option>';
+            tripSelect.innerHTML = '<option value="">Todos</option>';
 
             if (!tripItems.length) {
                 tripSelect.disabled = true;
@@ -3730,6 +3767,41 @@
             updateTrackingSummaryBar();
         }
 
+        function prepareTripSelection(tripId) {
+            const normalizedTripId = tripId == null || tripId === "" ? null : String(tripId);
+
+            if (normalizedTripId == null || selectedTripId == null || String(selectedTripId) !== normalizedTripId) {
+                isCategoryEditMode = false;
+                categoryEditTripId = null;
+            }
+
+            selectedTripId = normalizedTripId;
+            tripIdInput.value = normalizedTripId || "";
+            tripSelect.value = normalizedTripId || "";
+            setSplitMode(false);
+            if (currentPoints.length || currentTripsWithPoints.length || currentRouteSegments.length) {
+                resetLoadedTripPointsState({ preserveSelection: true });
+            }
+            resetTripStopsState();
+            updateTrackingSummaryBar();
+
+            if (normalizedTripId == null) {
+                setMessage("Recorridos preparados. Presiona Aplicar filtros para cargar el mapa.");
+                return;
+            }
+
+            setMessage(`Recorrido ${normalizedTripId} listo para cargar. Presiona Aplicar filtros.`);
+        }
+
+        async function applyPreparedFilters({ fitMap = true } = {}) {
+            if (selectedTripId != null) {
+                await selectTrip(selectedTripId, fitMap);
+                return;
+            }
+
+            await loadAllTripPointsFromSummaries({ fitMap });
+        }
+
         function clearSelectedTrip({ showMessage = true, fitMap = false } = {}) {
             selectedTripId = null;
             isCategoryEditMode = false;
@@ -3749,7 +3821,7 @@
             }
 
             if (showMessage) {
-                setMessage("Vista general de recorridos.");
+                setMessage("Seleccione y aplique filtros para ver recorridos");
             }
 
             resetTripStopsState();
@@ -5832,9 +5904,7 @@
                 resetLoadedTripPointsState();
 
                 if (showMessages) {
-                    const totalTrips = filteredTrips.length;
-                    const filterText = activeDateFilterValues.start || activeDateFilterValues.end ? " con filtro aplicado" : "";
-                    setMessage(`Recorridos listos${filterText}: ${totalTrips}. Seleccione un recorrido para ver sus puntos.`);
+                    setMessage("Seleccione y aplique filtros para ver recorridos");
                 }
             } catch (error) {
                 if (!showMessages && preserveOnError) {
@@ -6075,7 +6145,7 @@
 
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
-            await loadAllTrips();
+            await applyPreparedFilters();
         });
 
         filterStartInput.addEventListener("input", () => {
@@ -6084,6 +6154,36 @@
 
         filterEndInput.addEventListener("input", () => {
             updateDateFilterUi();
+        });
+
+        filterStartInput.addEventListener("change", async () => {
+            try {
+                const nextValues = getDateFilterDraftValues();
+                parseDateFilterRange(nextValues);
+                setActiveDateFilterValues(nextValues);
+                await loadAllTrips();
+            } catch (error) {
+                if (error.message === "inverted-filter") {
+                    setMessage("El inicio del filtro no puede ser posterior al fin.", true);
+                } else if (error.message === "invalid-filter") {
+                    setMessage("El rango de fecha/hora no es valido.", true);
+                }
+            }
+        });
+
+        filterEndInput.addEventListener("change", async () => {
+            try {
+                const nextValues = getDateFilterDraftValues();
+                parseDateFilterRange(nextValues);
+                setActiveDateFilterValues(nextValues);
+                await loadAllTrips();
+            } catch (error) {
+                if (error.message === "inverted-filter") {
+                    setMessage("El inicio del filtro no puede ser posterior al fin.", true);
+                } else if (error.message === "invalid-filter") {
+                    setMessage("El rango de fecha/hora no es valido.", true);
+                }
+            }
         });
 
         applyDateFilterButton.addEventListener("click", async () => {
@@ -6127,8 +6227,14 @@
         });
 
         loadAllButton.addEventListener("click", () => {
-            loadAllTripPointsFromSummaries();
+            applyPreparedFilters();
         });
+
+        if (applyFiltersButton) {
+            applyFiltersButton.addEventListener("click", async () => {
+                await applyPreparedFilters();
+            });
+        }
 
         loadTripButton.addEventListener("click", () => {
             loadTripInfo();
@@ -6307,16 +6413,8 @@
             loadAllTrips();
         });
 
-        tripSelect.addEventListener("change", async () => {
-            if (!tripSelect.value) {
-                updateTrackingSummaryBar();
-                clearSelectedTrip({ fitMap: true });
-                return;
-            }
-
-            setSplitMode(false);
-            updateTrackingSummaryBar();
-            await selectTrip(tripSelect.value, true);
+        tripSelect.addEventListener("change", () => {
+            prepareTripSelection(tripSelect.value);
         });
 
         autoRefreshInput.addEventListener("change", () => {
