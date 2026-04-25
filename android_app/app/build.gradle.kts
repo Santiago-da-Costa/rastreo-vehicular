@@ -29,7 +29,7 @@ android {
             "DEFAULT_LOCAL_API_URL",
             "\"http://10.0.2.2:8000/\""
         )
-        buildConfigField("long", "TRACKING_INTERVAL_MS", "15000L")
+        buildConfigField("long", "TRACKING_INTERVAL_MS", "5000L")
     }
 
     buildTypes {

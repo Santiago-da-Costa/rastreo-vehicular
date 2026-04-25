@@ -478,6 +478,23 @@ private fun DeveloperDiagnosticsCard(
                 ),
             )
             SummarySection(
+                title = "Diagnostico GPS",
+                lines = listOf(
+                    "Duracion ultima lectura: ${formatMillis(state.gpsReadDurationMs)}",
+                    "Duracion ultima iteracion de loop: ${formatMillis(state.loopDurationMs)}",
+                    "Lecturas totales: ${state.gpsReadCount}",
+                    "Lecturas null: ${state.gpsNullCount}",
+                    "Lecturas lentas (>3 s): ${state.gpsSlowReadCount}",
+                    "Lecturas muy lentas (>8 s): ${state.gpsVerySlowReadCount}",
+                    "Inicio ultima lectura: ${formatTimestamp(state.gpsReadStartedAt)}",
+                    "Fin ultima lectura: ${formatTimestamp(state.gpsReadFinishedAt)}",
+                    "Provider: ${state.lastLocationProvider.ifBlank { "No disponible" }}",
+                    "Edad estimada del fix: ${formatMillis(state.lastLocationAgeMs)}",
+                    "Precision actual GPS: ${formatAccuracy(state.lastAccuracy)}",
+                    "Velocidad actual GPS: ${formatSpeed(state.lastSpeed)}",
+                ),
+            )
+            SummarySection(
                 title = "Filtro GPS",
                 lines = listOf(
                     "Distancia al ultimo punto aceptado: ${formatDistance(state.lastFilterActualDistanceMeters)}",
@@ -650,6 +667,10 @@ private fun formatSpeed(value: Float?): String {
 
 private fun formatDistance(value: Double?): String {
     return value?.let { "${it.toInt()} m" } ?: "Sin dato"
+}
+
+private fun formatMillis(value: Long?): String {
+    return value?.let { "${it} ms" } ?: "No disponible"
 }
 
 private fun formatRequiredDistance(state: UiState): String {

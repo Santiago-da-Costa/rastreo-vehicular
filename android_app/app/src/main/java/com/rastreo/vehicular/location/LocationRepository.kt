@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
@@ -16,6 +17,8 @@ data class LocationSample(
     val longitude: Double,
     val accuracy: Float?,
     val speed: Float?,
+    val provider: String?,
+    val ageMs: Long?,
 )
 
 class LocationRepository(private val context: Context) {
@@ -51,6 +54,11 @@ class LocationRepository(private val context: Context) {
                                 longitude = it.longitude,
                                 accuracy = it.accuracy,
                                 speed = it.speed,
+                                provider = it.provider,
+                                ageMs = runCatching {
+                                    val ageNanos = SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos
+                                    (ageNanos.coerceAtLeast(0L)) / 1_000_000L
+                                }.getOrNull(),
                             )
                         }
                     )
