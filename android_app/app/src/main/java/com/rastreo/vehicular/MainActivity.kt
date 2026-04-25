@@ -1,6 +1,7 @@
 package com.rastreo.vehicular
 
 import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -8,7 +9,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,12 +20,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,18 +41,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.rastreo.vehicular.data.Vehicle
 import com.rastreo.vehicular.ui.AppViewModel
 import com.rastreo.vehicular.ui.AppViewModelFactory
 import com.rastreo.vehicular.ui.UiState
+import kotlinx.coroutines.delay
+import java.time.Duration
+import java.time.Instant
+import java.time.format.DateTimeParseException
+
+private val TRACKING_CATEGORIES = listOf("Trabajo", "Personal", "Mantenimiento", "Otro")
 
 class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels {
@@ -79,12 +99,9 @@ class MainActivity : ComponentActivity() {
                         onVehicleSelected = viewModel::selectVehicle,
                         onCategoryChanged = viewModel::updateCategory,
                         onStartTracking = {
-                            permissionsLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                )
-                            )
+                            if (viewModel.validateTrackingSelection()) {
+                                permissionsLauncher.launch(buildTrackingPermissionsRequest())
+                            }
                         },
                         onStopTracking = viewModel::stopTracking,
                         onRefreshVehicles = viewModel::loadVehicles,
@@ -93,6 +110,17 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+private fun buildTrackingPermissionsRequest(): Array<String> {
+    val permissions = mutableListOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions += Manifest.permission.POST_NOTIFICATIONS
+    }
+    return permissions.toTypedArray()
 }
 
 @Composable
@@ -111,6 +139,7 @@ private fun AppScreen(
     onRefreshVehicles: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
+    val currentTimeMillis by rememberCurrentTimeMillis()
 
     Column(
         modifier = Modifier
@@ -119,151 +148,357 @@ private fun AppScreen(
             .padding(horizontal = 16.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = "Rastreo Vehicular V1",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-
-        EnvironmentCard(
-            state = state,
-            onBaseUrlChanged = onBaseUrlChanged,
-            onUseProductionUrl = onUseProductionUrl,
-            onUseLocalUrl = onUseLocalUrl,
-            onSaveBaseUrl = onSaveBaseUrl,
-        )
-        DiagnosticsCard(state = state)
-
         if (state.isBootstrapping) {
             LoadingCard("Restaurando sesion...")
         } else if (state.currentUser == null) {
+            AppHeader(name = "OrdenaTrack", subtitle = "Inicia sesion para continuar")
+            EnvironmentCard(
+                state = state,
+                onBaseUrlChanged = onBaseUrlChanged,
+                onUseProductionUrl = onUseProductionUrl,
+                onUseLocalUrl = onUseLocalUrl,
+                onSaveBaseUrl = onSaveBaseUrl,
+            )
             LoginCard(state = state, onLogin = onLogin)
         } else {
-            SessionCard(state = state, onLogout = onLogout)
-            VehicleCard(
-                vehicles = state.vehicles,
-                selectedVehicleId = state.selectedVehicleId,
-                onVehicleSelected = onVehicleSelected,
-                onRefreshVehicles = onRefreshVehicles,
+            val canViewDebugPanel = state.currentUser.permissions["view_debug_panel"] == true
+            AppHeader(
+                name = "OrdenaTrack",
+                subtitle = "Bienvenido, ${resolveUserDisplayName(state)}",
+                onLogout = onLogout,
             )
-            TrackingCard(
+            TripSummaryCard(state = state)
+            MainControlsCard(
                 state = state,
+                onVehicleSelected = onVehicleSelected,
                 onCategoryChanged = onCategoryChanged,
                 onStartTracking = onStartTracking,
                 onStopTracking = onStopTracking,
+                onRefreshVehicles = onRefreshVehicles,
             )
-        }
-    }
-}
-
-@Composable
-private fun DiagnosticsCard(state: UiState) {
-    val user = state.currentUser
-    val selectedVehicle = state.vehicles.firstOrNull { it.id == state.selectedVehicleId }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Diagnostico", style = MaterialTheme.typography.titleMedium)
-            Text("Estado general", fontWeight = FontWeight.Bold)
-            DiagnosticRow("Sesion iniciada", if (user != null) "si" else "no")
-            DiagnosticRow("Usuario", user?.let { it.fullName.ifBlank { it.username } } ?: "sin sesion")
-            DiagnosticRow(
-                "Vehiculo",
-                selectedVehicle?.let { "${it.nombre} (${it.id})" }
-                    ?: state.selectedVehicleId?.toString()
-                    ?: "ninguno",
-            )
-            DiagnosticRow("Sesion invalida", if (state.isSessionInvalid) "si" else "no")
-            DiagnosticRow("Refresh disponible", if (state.refreshAvailable) "si" else "no")
-            DiagnosticRow("Trip activo", if (state.currentTripId != null) "si" else "no")
-            DiagnosticRow("Trip ID", state.currentTripId?.toString() ?: "sin iniciar")
-            DiagnosticRow("Puntos pendientes", state.pendingPointCount.toString())
-            DiagnosticRow(
-                "Trip con cola pendiente",
-                state.pendingQueueTripId?.toString() ?: "ninguno",
-            )
-            DiagnosticRow(
-                "Cierre de recorrido pendiente",
-                if (state.pendingTripClose) "si" else "no",
-            )
-            DiagnosticRow(
-                "Trip de cierre pendiente",
-                state.pendingCloseTripId?.toString() ?: "ninguno",
-            )
-            DiagnosticRow("Ultimo intento de sync", state.lastSyncAttemptAt)
-            DiagnosticRow("Ultimo error de sync", state.lastSyncError)
-            DiagnosticRow(
-                "Puntos subidos desde cola",
-                state.queuedPointsUploadedCount.toString(),
-            )
-            DiagnosticRow("Fallos de sync", state.syncFailureCount.toString())
-            DiagnosticRow(
-                "Auto cierre activo",
-                if (state.autoCloseRetryActive) "si" else "no",
-            )
-            DiagnosticRow("Ultimo resultado auto cierre", state.autoCloseRetryStatus)
-            DiagnosticRow("Intentos auto cierre", state.autoCloseRetryAttemptCount.toString())
-            DiagnosticRow("Categoria", state.category.ifBlank { "sin categoria" })
-
-            Text("Tracking", fontWeight = FontWeight.Bold)
-            DiagnosticRow("Trackeando", if (state.isTracking) "si" else "no")
-            DiagnosticRow("Ultimo intento lectura", state.lastLocationReadAttemptAt)
-            DiagnosticRow("Ultima ubicacion obtenida", state.lastLocationObtainedAt)
-            DiagnosticRow("Ultimo envio exitoso", state.lastSuccessfulSendAt)
-            DiagnosticRow("Ultimo fallo de envio", state.lastFailedSendAt)
-            DiagnosticRow("Intentos de envio", state.sendAttemptCount.toString())
-            DiagnosticRow("Envios exitosos", state.sendSuccessCount.toString())
-            DiagnosticRow("Fallos de envio", state.sendFailureCount.toString())
-
-            Text("Ultima ubicacion", fontWeight = FontWeight.Bold)
-            DiagnosticRow("Latitud", state.lastLatitude?.toString() ?: "sin dato")
-            DiagnosticRow("Longitud", state.lastLongitude?.toString() ?: "sin dato")
-            DiagnosticRow("Accuracy", state.lastAccuracy?.toString() ?: "sin dato")
-            DiagnosticRow("Speed", state.lastSpeed?.toString() ?: "sin dato")
-            DiagnosticRow("Timestamp", state.lastLocationTimestamp)
-
-            Text("Filtro GPS", fontWeight = FontWeight.Bold)
-            DiagnosticRow("Ultimo tipo de envio", state.lastSendType)
-            DiagnosticRow(
-                "Tiempo desde aceptado",
-                state.secondsSinceLastAcceptedPoint?.toString() ?: "sin dato",
-            )
-            DiagnosticRow(
-                "Descartes distancia desde aceptado",
-                state.distanceMinimumDiscardCountSinceLastAccepted.toString(),
-            )
-            DiagnosticRow("Ultimo descarte", state.lastDiscardReason)
-            DiagnosticRow(
-                "Segundos desde aceptado",
-                state.lastFilterElapsedSeconds?.toString() ?: "sin dato",
-            )
-            DiagnosticRow(
-                "Distancia requerida",
-                state.lastFilterRequiredDistanceMeters?.let { "${it.toInt()} m" } ?: "sin dato",
-            )
-            DiagnosticRow(
-                "Distancia real",
-                state.lastFilterActualDistanceMeters?.let { "${it.toInt()} m" } ?: "sin dato",
-            )
-
-            Text("Resultado operativo", fontWeight = FontWeight.Bold)
-            Text(state.operationMessage, style = MaterialTheme.typography.bodyMedium)
-            if (state.lastErrorMessage.isNotBlank()) {
-                Text("Ultimo error", fontWeight = FontWeight.Bold)
-                Text(state.lastErrorMessage, style = MaterialTheme.typography.bodyMedium)
+            StatusCard(state = state)
+            if (canViewDebugPanel) {
+                DeveloperDiagnosticsCard(
+                    state = state,
+                    currentTimeMillis = currentTimeMillis,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun DiagnosticRow(label: String, value: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-        Text(value, style = MaterialTheme.typography.bodyMedium)
+private fun AppHeader(
+    name: String,
+    subtitle: String,
+    onLogout: (() -> Unit)? = null,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "OT",
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(text = subtitle, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (onLogout != null) {
+                OutlinedButton(onClick = onLogout) {
+                    Text("Salir")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TripSummaryCard(state: UiState) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                text = if (state.currentTripId != null) "Recorrido activo" else "Recorrido desactivado",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+
+            SummarySection(
+                title = "Posiciones registradas",
+                lines = listOf(
+                    "Aceptadas o enviadas: ${state.sendSuccessCount}",
+                    "Lat: ${formatCoordinate(state.lastAcceptedLatitude)}",
+                    "Long: ${formatCoordinate(state.lastAcceptedLongitude)}",
+                    "Precision: ${formatAccuracy(state.lastAcceptedAccuracy)}",
+                ),
+            )
+            SummarySection(
+                title = "Inicio",
+                lines = listOf("Fecha y hora: ${formatTimestamp(state.trackingStartedAt)}"),
+            )
+            SummarySection(
+                title = "Categoria",
+                lines = listOf(state.category.ifBlank { "Sin categoria" }),
+            )
+            SummarySection(
+                title = "Velocidad actual",
+                lines = listOf(formatSpeed(state.lastSpeed)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummarySection(
+    title: String,
+    lines: List<String>,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        lines.forEach { line ->
+            Text(line, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainControlsCard(
+    state: UiState,
+    onVehicleSelected: (Int?) -> Unit,
+    onCategoryChanged: (String) -> Unit,
+    onStartTracking: () -> Unit,
+    onStopTracking: () -> Unit,
+    onRefreshVehicles: () -> Unit,
+) {
+    val userCanTrack = state.currentUser?.permissions?.get("edit_trips") == true
+    val isTrackingActive = state.currentTripId != null
+    var vehicleExpanded by remember { mutableStateOf(false) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("Controles principales", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = {
+                        if (isTrackingActive) {
+                            onStopTracking()
+                        } else {
+                            onStartTracking()
+                        }
+                    },
+                    enabled = if (isTrackingActive) !state.isBusy else userCanTrack && !state.isBusy,
+                    modifier = Modifier.size(140.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isTrackingActive) Color(0xFFB3261E) else Color(0xFF2E7D32),
+                    ),
+                    contentPadding = PaddingValues(12.dp),
+                ) {
+                    Text(
+                        text = if (isTrackingActive) "DETENER" else "INICIAR",
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ExposedDropdownMenuBox(
+                        expanded = vehicleExpanded,
+                        onExpandedChange = { vehicleExpanded = !vehicleExpanded },
+                    ) {
+                        OutlinedTextField(
+                            value = selectedVehicleLabel(state),
+                            onValueChange = {},
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            readOnly = true,
+                            singleLine = true,
+                            label = { Text("Vehiculo") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = vehicleExpanded)
+                            },
+                        )
+                        ExposedDropdownMenu(
+                            expanded = vehicleExpanded,
+                            onDismissRequest = { vehicleExpanded = false },
+                        ) {
+                            if (state.vehicles.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("Sin vehiculos") },
+                                    onClick = { vehicleExpanded = false },
+                                )
+                            } else {
+                                state.vehicles.forEach { vehicle ->
+                                    DropdownMenuItem(
+                                        text = { Text("${vehicle.nombre} (${vehicle.id})") },
+                                        onClick = {
+                                            onVehicleSelected(vehicle.id)
+                                            vehicleExpanded = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = categoryExpanded,
+                        onExpandedChange = { categoryExpanded = !categoryExpanded },
+                    ) {
+                        OutlinedTextField(
+                            value = state.category.ifBlank { "Selecciona una categoria" },
+                            onValueChange = {},
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            readOnly = true,
+                            singleLine = true,
+                            label = { Text("Categoria") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded)
+                            },
+                        )
+                        ExposedDropdownMenu(
+                            expanded = categoryExpanded,
+                            onDismissRequest = { categoryExpanded = false },
+                        ) {
+                            TRACKING_CATEGORIES.forEach { category ->
+                                DropdownMenuItem(
+                                    text = { Text(category) },
+                                    onClick = {
+                                        onCategoryChanged(category)
+                                        categoryExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = onRefreshVehicles, enabled = !state.isBusy) {
+                    Text("Recargar vehiculos")
+                }
+                Text(
+                    text = if (userCanTrack) {
+                        "Permiso de tracking habilitado."
+                    } else {
+                        "Este usuario no tiene permiso para iniciar recorridos."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusCard(state: UiState) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Estado", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Trip actual: ${state.currentTripId?.toString() ?: "Sin iniciar"}")
+            Text("Ultima ubicacion: ${state.lastLocationText}")
+            Text("Ultimo intento: ${state.lastAttemptText}")
+            StatusText(state.statusMessage)
+        }
+    }
+}
+
+@Composable
+private fun DeveloperDiagnosticsCard(
+    state: UiState,
+    currentTimeMillis: Long,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Diagnostico avanzado", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            SummarySection(
+                title = "Posiciones rechazadas",
+                lines = listOf(
+                    "Cantidad: ${state.rejectedPositionsCount}",
+                    "Ultimo motivo: ${state.lastDiscardReason.takeIf { it != "Sin descarte" } ?: "Sin dato"}",
+                    "Ultimo rechazo: ${formatTimestamp(state.lastRejectedAt)}",
+                ),
+            )
+            SummarySection(
+                title = "Posiciones en cola pendientes",
+                lines = listOf(
+                    "Puntos pendientes: ${state.pendingPointCount}",
+                    "Estado de sync: ${state.lastSyncError}",
+                ),
+            )
+            SummarySection(
+                title = "Tiempos",
+                lines = listOf(
+                    "Desde ultimo punto aceptado: ${formatElapsedSince(state.lastSuccessfulSendAt, currentTimeMillis)}",
+                    "Desde ultimo punto rechazado: ${formatElapsedSince(state.lastRejectedAt, currentTimeMillis)}",
+                ),
+            )
+            SummarySection(
+                title = "Filtro GPS",
+                lines = listOf(
+                    "Distancia al ultimo punto aceptado: ${formatDistance(state.lastFilterActualDistanceMeters)}",
+                    "Distancia necesaria para aceptar: ${formatRequiredDistance(state)}",
+                    "Tiempo minimo para almacenar puntos: 5 s",
+                    "Precision maxima exigida: 100 m",
+                    "Precision actual GPS: ${formatAccuracy(state.lastAccuracy)}",
+                    "Precision ultimo punto aceptado: ${formatAccuracy(state.lastAcceptedAccuracy)}",
+                ),
+            )
+            SummarySection(
+                title = "Estado del sistema",
+                lines = listOf(
+                    "serviceRunning: ${formatBoolean(state.serviceRunning)}",
+                    "trackingActive: ${formatBoolean(state.isTracking)}",
+                    "currentTripId: ${state.currentTripId?.toString() ?: "Sin dato"}",
+                    "Ultimo error operativo: ${state.lastErrorMessage.ifBlank { "Sin dato" }}",
+                    "Ultimo mensaje operativo: ${state.operationMessage.ifBlank { "Sin dato" }}",
+                ),
+            )
+        }
     }
 }
 
@@ -289,23 +524,28 @@ private fun EnvironmentCard(
                 singleLine = true,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onUseProductionUrl, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                Button(
+                    onClick = onUseProductionUrl,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) {
                     Text("Produccion")
                 }
-                Button(onClick = onUseLocalUrl, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                Button(
+                    onClick = onUseLocalUrl,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) {
                     Text("Local emulador")
                 }
-                Button(onClick = onSaveBaseUrl, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                Button(
+                    onClick = onSaveBaseUrl,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) {
                     Text("Guardar")
                 }
             }
             Text(
                 text = "URL activa: ${state.baseUrl.ifBlank { "sin configurar" }}",
                 style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                text = "Render: usa la URL https. Emulador: http://10.0.2.2:8000/. Celular real: usa la IP LAN del backend, por ejemplo http://192.168.1.50:8000/.",
-                style = MaterialTheme.typography.bodySmall,
             )
         }
     }
@@ -357,126 +597,12 @@ private fun LoginCard(
 }
 
 @Composable
-private fun SessionCard(
-    state: UiState,
-    onLogout: () -> Unit,
-) {
-    val user = state.currentUser ?: return
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Sesion", style = MaterialTheme.typography.titleMedium)
-            Text("Usuario: ${user.fullName.ifBlank { user.username }}")
-            Text("Rol: ${user.role}")
-            Text("Puede editar trips: ${if (user.permissions["edit_trips"] == true) "si" else "no"}")
-            Button(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
-                Text("Cerrar sesion")
-            }
-            StatusText(state.statusMessage)
-        }
-    }
-}
-
-@Composable
-private fun VehicleCard(
-    vehicles: List<Vehicle>,
-    selectedVehicleId: Int?,
-    onVehicleSelected: (Int?) -> Unit,
-    onRefreshVehicles: () -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Vehiculos", style = MaterialTheme.typography.titleMedium)
-            Button(onClick = onRefreshVehicles, modifier = Modifier.fillMaxWidth()) {
-                Text("Recargar vehiculos")
-            }
-            if (vehicles.isEmpty()) {
-                Text("No hay vehiculos visibles para este usuario.")
-            } else {
-                vehicles.forEach { vehicle ->
-                    val isSelected = vehicle.id == selectedVehicleId
-                    Button(
-                        onClick = { onVehicleSelected(vehicle.id) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = if (isSelected) {
-                                "Seleccionado: ${vehicle.nombre} (${vehicle.id})"
-                            } else {
-                                "${vehicle.nombre} (${vehicle.id})"
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TrackingCard(
-    state: UiState,
-    onCategoryChanged: (String) -> Unit,
-    onStartTracking: () -> Unit,
-    onStopTracking: () -> Unit,
-) {
-    val userCanTrack = state.currentUser?.permissions?.get("edit_trips") == true
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Tracking", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(
-                value = state.category,
-                onValueChange = onCategoryChanged,
-                label = { Text("Categoria") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            Text("Vehiculo seleccionado: ${state.selectedVehicleId ?: "ninguno"}")
-            Text("Tracking activo: ${if (state.isTracking) "si" else "no"}")
-            Text("Trip actual: ${state.currentTripId ?: "sin iniciar"}")
-            Text("Ultima ubicacion: ${state.lastLocationText}")
-            Text("Ultimo intento: ${state.lastAttemptText}")
-            Text("Permiso de ubicacion: ${if (state.hasLocationPermission) "otorgado" else "pendiente"}")
-            if (!userCanTrack) {
-                Text("Este usuario no tiene permiso edit_trips en el backend actual.")
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onStartTracking,
-                    enabled = userCanTrack && !state.isTracking && state.selectedVehicleId != null && !state.isBusy,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    Text("Iniciar")
-                }
-                Button(
-                    onClick = onStopTracking,
-                    enabled = state.currentTripId != null && !state.isBusy,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    Text("Detener")
-                }
-            }
-            StatusText(state.statusMessage)
-        }
-    }
-}
-
-@Composable
 private fun LoadingCard(message: String) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CircularProgressIndicator()
             Text(message)
@@ -489,4 +615,75 @@ private fun StatusText(message: String) {
     if (message.isBlank()) return
     Spacer(modifier = Modifier.height(4.dp))
     Text(message, style = MaterialTheme.typography.bodyMedium)
+}
+
+@Composable
+private fun rememberCurrentTimeMillis() = produceState(initialValue = System.currentTimeMillis()) {
+    while (true) {
+        value = System.currentTimeMillis()
+        delay(1_000L)
+    }
+}
+
+private fun resolveUserDisplayName(state: UiState): String {
+    val user = state.currentUser ?: return "Usuario"
+    return user.fullName.ifBlank { user.email ?: user.username }
+}
+
+private fun selectedVehicleLabel(state: UiState): String {
+    val selectedVehicle = state.vehicles.firstOrNull { it.id == state.selectedVehicleId }
+    return selectedVehicle?.let { "${it.nombre} (${it.id})" } ?: "Selecciona un vehiculo"
+}
+
+private fun formatCoordinate(value: Double?): String {
+    return value?.let { String.format("%.6f", it) } ?: "Sin dato"
+}
+
+private fun formatAccuracy(value: Float?): String {
+    return value?.let { "${it.toInt()} m" } ?: "Sin dato"
+}
+
+private fun formatSpeed(value: Float?): String {
+    val kmh = value?.times(3.6f)
+    return kmh?.let { String.format("%.1f km/h", it) } ?: "Sin dato"
+}
+
+private fun formatDistance(value: Double?): String {
+    return value?.let { "${it.toInt()} m" } ?: "Sin dato"
+}
+
+private fun formatRequiredDistance(state: UiState): String {
+    val requiredDistance = state.lastFilterRequiredDistanceMeters ?: state.lastAccuracy?.times(2)?.toDouble()
+    return formatDistance(requiredDistance)
+}
+
+private fun formatBoolean(value: Boolean): String {
+    return if (value) "si" else "no"
+}
+
+private fun formatTimestamp(timestamp: String): String {
+    if (timestamp.isBlank() || timestamp == "Sin dato" || timestamp == "Sin intento") {
+        return "Sin dato"
+    }
+    return runCatching {
+        Instant.parse(timestamp).toString().replace("T", " ").removeSuffix("Z")
+    }.getOrElse { timestamp }
+}
+
+private fun formatElapsedSince(timestamp: String, currentTimeMillis: Long): String {
+    if (timestamp.isBlank() || timestamp == "Sin dato" || timestamp == "Sin intento") {
+        return "Sin dato"
+    }
+    val instant = try {
+        Instant.parse(timestamp)
+    } catch (_: DateTimeParseException) {
+        return timestamp
+    }
+    val duration = Duration.between(instant, Instant.ofEpochMilli(currentTimeMillis))
+    if (duration.isNegative) {
+        return "0m 0s"
+    }
+    val minutes = duration.toMinutes()
+    val seconds = duration.seconds % 60
+    return "${minutes}m ${seconds}s"
 }

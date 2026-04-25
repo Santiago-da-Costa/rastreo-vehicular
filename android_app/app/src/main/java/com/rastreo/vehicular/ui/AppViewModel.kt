@@ -1,36 +1,35 @@
 package com.rastreo.vehicular.ui
 
 import android.content.Context
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.rastreo.vehicular.data.PendingSyncStore
 import com.rastreo.vehicular.data.PendingTripPointDraft
-import com.rastreo.vehicular.BuildConfig
 import com.rastreo.vehicular.data.RefreshTransientException
 import com.rastreo.vehicular.data.RastreoRepository
 import com.rastreo.vehicular.data.SessionStore
+import com.rastreo.vehicular.data.TrackingStatus
+import com.rastreo.vehicular.data.TrackingStatusStore
 import com.rastreo.vehicular.data.TripPointRequest
 import com.rastreo.vehicular.data.UserMeResponse
 import com.rastreo.vehicular.data.Vehicle
 import com.rastreo.vehicular.location.LocationRepository
+import com.rastreo.vehicular.service.TrackingForegroundService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.IOException
-import java.time.Duration
 import java.time.Instant
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 import retrofit2.HttpException
 
 data class UiState(
@@ -39,9 +38,11 @@ data class UiState(
     val currentUser: UserMeResponse? = null,
     val vehicles: List<Vehicle> = emptyList(),
     val selectedVehicleId: Int? = null,
-    val category: String = "trabajo",
+    val category: String = "",
     val currentTripId: Int? = null,
+    val trackingStartedAt: String = "Sin dato",
     val isTracking: Boolean = false,
+    val serviceRunning: Boolean = false,
     val isSessionInvalid: Boolean = false,
     val pendingTripClose: Boolean = false,
     val pendingPointCount: Int = 0,
@@ -67,8 +68,13 @@ data class UiState(
     val lastLatitude: Double? = null,
     val lastLongitude: Double? = null,
     val lastAccuracy: Float? = null,
+    val lastAcceptedLatitude: Double? = null,
+    val lastAcceptedLongitude: Double? = null,
+    val lastAcceptedAccuracy: Float? = null,
     val lastSpeed: Float? = null,
     val lastLocationTimestamp: String = "Sin dato",
+    val rejectedPositionsCount: Int = 0,
+    val lastRejectedAt: String = "Sin dato",
     val lastDiscardReason: String = "Sin descarte",
     val lastFilterElapsedSeconds: Long? = null,
     val lastFilterRequiredDistanceMeters: Double? = null,
@@ -85,8 +91,10 @@ data class UiState(
 )
 
 class AppViewModel(
+    private val appContext: Context,
     private val sessionStore: SessionStore,
     private val pendingSyncStore: PendingSyncStore,
+    private val trackingStatusStore: TrackingStatusStore,
     private val repository: RastreoRepository,
     private val locationRepository: LocationRepository,
 ) : ViewModel() {
@@ -95,11 +103,14 @@ class AppViewModel(
     )
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    private var trackingJob: Job? = null
     private var pendingCloseRetryJob: Job? = null
     private var lastAcceptedPoint: AcceptedPoint? = null
     private var distanceMinimumDiscardCountSinceLastAccepted = 0
     private val pendingCloseSyncMutex = Mutex()
+
+    init {
+        observeTrackingStatus()
+    }
 
     fun bootstrap() {
         viewModelScope.launch {
@@ -151,6 +162,7 @@ class AppViewModel(
                     )
                 }
                 refreshPendingSyncUi()
+                recoverTrackingServiceIfNeeded(appContext)
                 syncPendingStateAfterAuthenticatedSession(baseUrl, session.token)
                 ensurePendingCloseRetry()
             } else {
@@ -181,6 +193,99 @@ class AppViewModel(
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun recoverTrackingServiceIfNeeded(context: Context) {
+        val session = sessionStore.sessionData.first()
+        if (session.token.isBlank()) {
+            return
+        }
+        if (!locationRepository.hasLocationPermission()) {
+            return
+        }
+
+        val pendingSyncState = pendingSyncStore.getState()
+        val activeTripId = pendingSyncState.activeTripId ?: return
+        if (pendingSyncState.pendingClose != null) {
+            return
+        }
+
+        ContextCompat.startForegroundService(
+            context,
+            TrackingForegroundService.createStartIntent(
+                context = context,
+                tripId = activeTripId,
+            ),
+        )
+    }
+
+    private fun observeTrackingStatus() {
+        viewModelScope.launch {
+            trackingStatusStore.trackingStatus.collect { status ->
+                _uiState.update { state ->
+                    state.copy(
+                        currentTripId = state.currentTripId ?: status.currentTripId,
+                        trackingStartedAt = status.trackingStartedAt,
+                        isTracking = state.isTracking || status.trackingActive,
+                        serviceRunning = status.serviceRunning,
+                        lastLocationText = buildLastLocationText(status),
+                        lastAttemptText = status.lastReadAttemptAt,
+                        lastLocationReadAttemptAt = status.lastReadAttemptAt,
+                        lastLocationObtainedAt = status.lastLocationAt,
+                        lastSuccessfulSendAt = status.lastSuccessfulSendAt,
+                        lastFailedSendAt = status.lastSendFailureAt,
+                        sendAttemptCount = status.sendAttemptsCount,
+                        sendSuccessCount = status.successfulSendsCount,
+                        sendFailureCount = status.failedSendsCount,
+                        lastLatitude = status.lastLatitude,
+                        lastLongitude = status.lastLongitude,
+                        lastAccuracy = status.lastAccuracy,
+                        lastAcceptedLatitude = status.lastAcceptedLatitude,
+                        lastAcceptedLongitude = status.lastAcceptedLongitude,
+                        lastAcceptedAccuracy = status.lastAcceptedAccuracy,
+                        lastSpeed = status.lastSpeed,
+                        lastLocationTimestamp = status.lastLocationAt,
+                        rejectedPositionsCount = status.rejectedPositionsCount,
+                        lastRejectedAt = status.lastRejectedAt,
+                        lastDiscardReason = status.lastGpsDiscardReason,
+                        lastFilterElapsedSeconds = status.lastFilterElapsedSeconds,
+                        lastFilterRequiredDistanceMeters = status.lastFilterRequiredDistanceMeters,
+                        lastFilterActualDistanceMeters = status.lastFilterActualDistanceMeters,
+                        secondsSinceLastAcceptedPoint = status.secondsSinceLastAcceptedPoint,
+                        distanceMinimumDiscardCountSinceLastAccepted =
+                            status.distanceMinimumDiscardCountSinceLastAccepted,
+                        lastSendType = status.lastSendType,
+                        operationMessage = mergeOperationalMessage(state, status),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun buildLastLocationText(status: TrackingStatus): String {
+        val latitude = status.lastLatitude
+        val longitude = status.lastLongitude
+        return if (latitude != null && longitude != null) {
+            "$latitude, $longitude"
+        } else {
+            "Sin dato"
+        }
+    }
+
+    private fun mergeOperationalMessage(
+        state: UiState,
+        status: TrackingStatus,
+    ): String {
+        return if (
+            status.serviceRunning ||
+            status.trackingActive ||
+            status.currentTripId != null ||
+            status.lastOperationalMessage != "Esperando accion."
+        ) {
+            status.lastOperationalMessage
+        } else {
+            state.operationMessage
         }
     }
 
@@ -291,8 +396,8 @@ class AppViewModel(
 
     fun logout() {
         viewModelScope.launch {
-            trackingJob?.cancel()
             pendingCloseRetryJob?.cancel()
+            stopTrackingService(appContext)
             lastAcceptedPoint = null
             distanceMinimumDiscardCountSinceLastAccepted = 0
             sessionStore.clearSession()
@@ -392,6 +497,22 @@ class AppViewModel(
         _uiState.update { it.copy(category = value) }
     }
 
+    fun validateTrackingSelection(): Boolean {
+        val state = uiState.value
+        val isValid = state.selectedVehicleId != null && state.category.isNotBlank()
+        if (!isValid) {
+            val message = "Debes seleccionar un vehiculo y una categoria antes de iniciar."
+            _uiState.update {
+                it.copy(
+                    statusMessage = message,
+                    operationMessage = message,
+                    lastErrorMessage = message,
+                )
+            }
+        }
+        return isValid
+    }
+
     fun onLocationPermissionResult(granted: Boolean) {
         _uiState.update { it.copy(hasLocationPermission = granted) }
         if (!granted) {
@@ -406,6 +527,26 @@ class AppViewModel(
             return
         }
         startTracking()
+    }
+
+    fun startTrackingService(
+        context: Context,
+        tripId: Int,
+        vehicleId: Int,
+        category: String,
+    ) {
+        val serviceIntent = TrackingForegroundService.createStartIntent(
+            context = context,
+            tripId = tripId,
+            vehicleId = vehicleId,
+            category = category,
+        )
+        ContextCompat.startForegroundService(context, serviceIntent)
+    }
+
+    fun stopTrackingService(context: Context) {
+        val serviceIntent = TrackingForegroundService.createStopIntent(context)
+        context.startService(serviceIntent)
     }
 
     private fun startTracking() {
@@ -469,8 +610,7 @@ class AppViewModel(
             return
         }
 
-        trackingJob?.cancel()
-        trackingJob = viewModelScope.launch {
+        viewModelScope.launch {
             val token = sessionStore.sessionData.first().token
             _uiState.update { it.copy(isBusy = true, statusMessage = "Iniciando tracking...") }
             val startTripResult = runCatching {
@@ -482,6 +622,12 @@ class AppViewModel(
                 val trip = startedTrip
                 pendingSyncStore.setActiveTripId(trip.id)
                 pendingSyncStore.clearPendingClose(trip.id)
+                startTrackingService(
+                    context = appContext,
+                    tripId = trip.id,
+                    vehicleId = vehicleId,
+                    category = state.category.trim(),
+                )
                 _uiState.update {
                     it.copy(
                         isBusy = false,
@@ -516,7 +662,6 @@ class AppViewModel(
                 }
                 lastAcceptedPoint = null
                 distanceMinimumDiscardCountSinceLastAccepted = 0
-                trackingLoop(trip.id, token)
             } else {
                 val error = startTripResult.exceptionOrNull()
                 if (isUnauthorizedError(error)) {
@@ -531,6 +676,7 @@ class AppViewModel(
                     } else {
                         error?.message ?: "No se pudo iniciar el trip."
                     }
+                    stopTrackingService(appContext)
                     _uiState.update { current ->
                         current.copy(
                             isBusy = false,
@@ -558,7 +704,7 @@ class AppViewModel(
             }
             return
         }
-        trackingJob?.cancel()
+        stopTrackingService(appContext)
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
@@ -687,246 +833,6 @@ class AppViewModel(
         }
     }
 
-    private suspend fun trackingLoop(tripId: Int, token: String) {
-        while (uiState.value.isTracking) {
-            val timestamp = Instant.now().toString()
-            _uiState.update {
-                it.copy(
-                    lastAttemptText = timestamp,
-                    lastLocationReadAttemptAt = timestamp,
-                    operationMessage = "Intentando obtener ubicacion.",
-                )
-            }
-
-            val location = locationRepository.getCurrentLocation()
-            if (location == null) {
-                val message = "No se pudo obtener ubicacion GPS en este intento."
-                _uiState.update {
-                    it.copy(
-                        statusMessage = message,
-                        operationMessage = "Ubicacion no disponible.",
-                        lastErrorMessage = message,
-                    )
-                }
-                kotlinx.coroutines.delay(BuildConfig.TRACKING_INTERVAL_MS)
-                continue
-            }
-
-            val currentInstant = Instant.parse(timestamp)
-            val validation = validateLocationPoint(
-                tripId = tripId,
-                location = location,
-                currentInstant = currentInstant,
-            )
-            _uiState.update {
-                it.copy(
-                    lastLocationText = "${location.latitude}, ${location.longitude}",
-                    lastLocationObtainedAt = timestamp,
-                    lastLatitude = location.latitude,
-                    lastLongitude = location.longitude,
-                    lastAccuracy = location.accuracy,
-                    lastSpeed = location.speed,
-                    lastLocationTimestamp = timestamp,
-                    lastFilterElapsedSeconds = validation.elapsedSeconds,
-                    lastFilterRequiredDistanceMeters = validation.requiredDistanceMeters,
-                    lastFilterActualDistanceMeters = validation.actualDistanceMeters,
-                    operationMessage = "Ubicacion obtenida.",
-                )
-            }
-
-            if (validation.discardType == DiscardType.MINIMUM_DISTANCE) {
-                distanceMinimumDiscardCountSinceLastAccepted += 1
-            }
-
-            val shouldSendPermanencePoint = shouldSendPermanencePoint(validation)
-            if (!validation.isAccepted && !shouldSendPermanencePoint) {
-                val reason = validation.discardReason ?: "Punto descartado."
-                _uiState.update {
-                    it.copy(
-                        secondsSinceLastAcceptedPoint = validation.elapsedSeconds,
-                        distanceMinimumDiscardCountSinceLastAccepted =
-                            distanceMinimumDiscardCountSinceLastAccepted,
-                        lastDiscardReason = reason,
-                        operationMessage = reason,
-                        statusMessage = reason,
-                    )
-                }
-                kotlinx.coroutines.delay(BuildConfig.TRACKING_INTERVAL_MS)
-                continue
-            }
-
-            val request = TripPointRequest(
-                latitude = location.latitude,
-                longitude = location.longitude,
-                timestamp = timestamp,
-                accuracy = location.accuracy,
-                speed = location.speed,
-            )
-            val sendType = if (shouldSendPermanencePoint) {
-                "permanencia"
-            } else {
-                "normal"
-            }
-            val pendingPointDraft = PendingTripPointDraft(
-                tripId = tripId,
-                latitude = location.latitude,
-                longitude = location.longitude,
-                timestamp = timestamp,
-                accuracy = location.accuracy,
-                speed = location.speed,
-                sendType = sendType,
-            )
-
-            _uiState.update {
-                it.copy(
-                    sendAttemptCount = it.sendAttemptCount + 1,
-                    secondsSinceLastAcceptedPoint = validation.elapsedSeconds,
-                    distanceMinimumDiscardCountSinceLastAccepted =
-                        distanceMinimumDiscardCountSinceLastAccepted,
-                    operationMessage = if (shouldSendPermanencePoint) {
-                        "Enviando punto por permanencia."
-                    } else {
-                        "Enviando punto."
-                    },
-                )
-            }
-
-            when (syncPendingPointsForTrip(tripId, token, uiState.value.baseUrl)) {
-                SyncResult.UNAUTHORIZED -> {
-                    enqueuePendingPoint(pendingPointDraft)
-                    val hasPendingClose = pendingSyncStore.getState().pendingClose != null
-                    markSessionExpired(
-                        statusMessage = "Sesion expirada durante el tracking. Inicia sesion nuevamente para cerrar o continuar.",
-                        operationMessage = "Tracking detenido por sesion expirada.",
-                        preserveTripId = tripId,
-                        pendingTripClose = hasPendingClose,
-                        clearUserContext = false,
-                        failedAt = Instant.now().toString(),
-                        lastLocationText = "${location.latitude}, ${location.longitude}",
-                        incrementSendFailure = true,
-                    )
-                }
-
-                SyncResult.RETRY_LATER -> {
-                    enqueuePendingPoint(pendingPointDraft)
-                    val message = "Punto guardado en cola por problema de conexion."
-                    _uiState.update { state ->
-                        state.copy(
-                            lastLocationText = "${location.latitude}, ${location.longitude}",
-                            statusMessage = message,
-                            operationMessage = "Punto agregado a cola offline.",
-                            lastFailedSendAt = Instant.now().toString(),
-                            sendFailureCount = state.sendFailureCount + 1,
-                            lastErrorMessage = message,
-                        )
-                    }
-                }
-
-                SyncResult.SUCCESS -> {
-                    if (pendingSyncStore.hasPendingPointsForTrip(tripId)) {
-                        enqueuePendingPoint(pendingPointDraft)
-                        val message = "Punto guardado en cola hasta completar la sincronizacion pendiente."
-                        _uiState.update { state ->
-                            state.copy(
-                                lastLocationText = "${location.latitude}, ${location.longitude}",
-                                statusMessage = message,
-                                operationMessage = "Punto agregado a cola offline.",
-                                lastFailedSendAt = Instant.now().toString(),
-                                sendFailureCount = state.sendFailureCount + 1,
-                                lastErrorMessage = message,
-                            )
-                        }
-                    } else {
-                        val sendPointResult = runCatching {
-                            repository.sendTripPoint(uiState.value.baseUrl, token, tripId, request)
-                        }
-
-                        if (sendPointResult.isSuccess) {
-                            val sentAt = Instant.now().toString()
-                            val uiSendType = if (shouldSendPermanencePoint) {
-                                "Envio por permanencia"
-                            } else {
-                                "Envio normal"
-                            }
-                            val pendingSyncState = pendingSyncStore.getState()
-                            _uiState.update {
-                                it.copy(
-                                    lastLocationText = "${location.latitude}, ${location.longitude}",
-                                    statusMessage = if (shouldSendPermanencePoint) {
-                                        "Punto de permanencia enviado correctamente."
-                                    } else {
-                                        "Ubicacion enviada correctamente."
-                                    },
-                                    operationMessage = if (shouldSendPermanencePoint) {
-                                        "Punto de permanencia enviado."
-                                    } else {
-                                        "Punto enviado."
-                                    },
-                                    lastSuccessfulSendAt = sentAt,
-                                    sendSuccessCount = it.sendSuccessCount + 1,
-                                    lastDiscardReason = "Sin descarte",
-                                    secondsSinceLastAcceptedPoint = 0,
-                                    distanceMinimumDiscardCountSinceLastAccepted = 0,
-                                    pendingTripClose = pendingSyncState.pendingClose != null,
-                                    pendingPointCount = pendingSyncState.pendingPoints.size,
-                                    isSessionInvalid = false,
-                                    lastSendType = uiSendType,
-                                    lastErrorMessage = "",
-                                )
-                            }
-                            lastAcceptedPoint = AcceptedPoint(
-                                latitude = location.latitude,
-                                longitude = location.longitude,
-                                acceptedAt = currentInstant,
-                            )
-                            distanceMinimumDiscardCountSinceLastAccepted = 0
-                            runPendingCloseSyncAttempt(token, uiState.value.baseUrl)
-                        } else {
-                            val error = sendPointResult.exceptionOrNull()
-                            val failedAt = Instant.now().toString()
-                            enqueuePendingPoint(pendingPointDraft)
-                            if (isUnauthorizedError(error)) {
-                                val hasPendingClose = pendingSyncStore.getState().pendingClose != null
-                                markSessionExpired(
-                                    statusMessage = "Sesion expirada durante el tracking. Inicia sesion nuevamente para cerrar o continuar.",
-                                    operationMessage = "Tracking detenido por sesion expirada.",
-                                    preserveTripId = tripId,
-                                    pendingTripClose = hasPendingClose,
-                                    clearUserContext = false,
-                                    failedAt = failedAt,
-                                    lastLocationText = "${location.latitude}, ${location.longitude}",
-                                    incrementSendFailure = true,
-                                )
-                            } else {
-                                val message = if (isNetworkError(error)) {
-                                    "No se pudo enviar la ubicacion por problema de conexion. Punto guardado en cola."
-                                } else {
-                                    "No se pudo enviar la ubicacion. Punto guardado en cola."
-                                }
-                                _uiState.update { state ->
-                                    state.copy(
-                                        lastLocationText = "${location.latitude}, ${location.longitude}",
-                                        statusMessage = message,
-                                        operationMessage = "Punto agregado a cola offline.",
-                                        lastFailedSendAt = failedAt,
-                                        sendFailureCount = state.sendFailureCount + 1,
-                                        lastErrorMessage = message,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!uiState.value.isTracking) {
-                break
-            }
-
-            kotlinx.coroutines.delay(BuildConfig.TRACKING_INTERVAL_MS)
-        }
-    }
-
     private fun isUnauthorizedError(error: Throwable?): Boolean {
         return error is HttpException && error.code() == 401
     }
@@ -994,6 +900,7 @@ class AppViewModel(
         val session = sessionStore.sessionData.first()
         val pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId
         val pendingCloseTripId = pendingSyncState.pendingClose?.tripId
+        val hasActiveTrip = pendingSyncState.activeTripId != null && pendingCloseTripId == null
         val storedTripId = forceTripId
             ?: pendingCloseTripId
             ?: pendingSyncState.activeTripId
@@ -1006,6 +913,11 @@ class AppViewModel(
                     storedTripId != null -> storedTripId
                     preserveCurrentTripId -> state.currentTripId
                     else -> null
+                },
+                isTracking = when {
+                    state.isTracking -> true
+                    hasActiveTrip -> true
+                    else -> false
                 },
                 pendingTripClose = pendingSyncState.pendingClose != null,
                 pendingPointCount = pendingSyncState.pendingPoints.size,
@@ -1344,7 +1256,6 @@ class AppViewModel(
     }
 
     override fun onCleared() {
-        trackingJob?.cancel()
         pendingCloseRetryJob?.cancel()
         _uiState.update { state ->
             state.copy(
@@ -1383,80 +1294,12 @@ class AppViewModel(
     }
 
     private fun chooseVehicle(visibleVehicleIds: List<Int>, vehicles: List<Vehicle>): Int? {
-        return vehicles.firstOrNull { it.id in visibleVehicleIds }?.id ?: vehicles.firstOrNull()?.id
-    }
-
-    private suspend fun validateLocationPoint(
-        tripId: Int,
-        location: com.rastreo.vehicular.location.LocationSample,
-        currentInstant: Instant,
-    ): PointValidation {
-        val accuracy = location.accuracy
-        val requiredDistance = accuracy?.times(2)?.toDouble()
-        val previous = getLocalAcceptedPoint(tripId) ?: return PointValidation(
-            isAccepted = accuracy == null || accuracy <= MAX_ACCEPTED_ACCURACY_METERS,
-            discardReason = if (accuracy != null && accuracy > MAX_ACCEPTED_ACCURACY_METERS) {
-                "Descartado por precision."
-            } else {
-                null
-            },
-            discardType = if (accuracy != null && accuracy > MAX_ACCEPTED_ACCURACY_METERS) {
-                DiscardType.PRECISION
-            } else {
-                null
-            },
-            elapsedSeconds = null,
-            requiredDistanceMeters = requiredDistance,
-            actualDistanceMeters = null,
-        )
-
-        val elapsedSeconds = Duration.between(previous.acceptedAt, currentInstant).seconds
-        val actualDistance = distanceMeters(
-            previous.latitude,
-            previous.longitude,
-            location.latitude,
-            location.longitude,
-        )
-
+        val visibleVehicles = vehicles.filter { it.id in visibleVehicleIds }
         return when {
-            accuracy != null && accuracy > MAX_ACCEPTED_ACCURACY_METERS -> PointValidation(
-                isAccepted = false,
-                discardReason = "Descartado por precision.",
-                discardType = DiscardType.PRECISION,
-                elapsedSeconds = elapsedSeconds,
-                requiredDistanceMeters = requiredDistance,
-                actualDistanceMeters = actualDistance,
-            )
-            elapsedSeconds < MIN_SECONDS_BETWEEN_ACCEPTED_POINTS -> PointValidation(
-                isAccepted = false,
-                discardReason = "Descartado por tiempo minimo.",
-                discardType = DiscardType.MINIMUM_TIME,
-                elapsedSeconds = elapsedSeconds,
-                requiredDistanceMeters = requiredDistance,
-                actualDistanceMeters = actualDistance,
-            )
-            requiredDistance != null && actualDistance < requiredDistance -> PointValidation(
-                isAccepted = false,
-                discardReason = "Descartado por distancia minima.",
-                discardType = DiscardType.MINIMUM_DISTANCE,
-                elapsedSeconds = elapsedSeconds,
-                requiredDistanceMeters = requiredDistance,
-                actualDistanceMeters = actualDistance,
-            )
-            else -> PointValidation(
-                isAccepted = true,
-                discardReason = null,
-                discardType = null,
-                elapsedSeconds = elapsedSeconds,
-                requiredDistanceMeters = requiredDistance,
-                actualDistanceMeters = actualDistance,
-            )
+            visibleVehicles.size == 1 -> visibleVehicles.first().id
+            visibleVehicleIds.isEmpty() && vehicles.size == 1 -> vehicles.first().id
+            else -> null
         }
-    }
-
-    private suspend fun getLocalAcceptedPoint(tripId: Int): AcceptedPoint? {
-        val pendingPoint = pendingSyncStore.getLastPendingPointForTrip(tripId)
-        return pendingPoint?.toAcceptedPoint() ?: lastAcceptedPoint
     }
 
     private fun updateLastAcceptedPoint(
@@ -1473,60 +1316,11 @@ class AppViewModel(
         distanceMinimumDiscardCountSinceLastAccepted = 0
     }
 
-    private fun distanceMeters(
-        startLatitude: Double,
-        startLongitude: Double,
-        endLatitude: Double,
-        endLongitude: Double,
-    ): Double {
-        val earthRadiusMeters = 6_371_000.0
-        val startLatRad = Math.toRadians(startLatitude)
-        val endLatRad = Math.toRadians(endLatitude)
-        val deltaLatRad = Math.toRadians(endLatitude - startLatitude)
-        val deltaLonRad = Math.toRadians(endLongitude - startLongitude)
-        val a = sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
-            cos(startLatRad) * cos(endLatRad) *
-            sin(deltaLonRad / 2) * sin(deltaLonRad / 2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return earthRadiusMeters * c
-    }
-
-    private fun shouldSendPermanencePoint(validation: PointValidation): Boolean {
-        return validation.discardType == DiscardType.MINIMUM_DISTANCE &&
-            validation.elapsedSeconds != null &&
-            validation.elapsedSeconds >= PERMANENCE_POINT_SECONDS &&
-            distanceMinimumDiscardCountSinceLastAccepted >= MIN_DISTANCE_DISCARDS_FOR_PERMANENCE
-    }
-
     private data class AcceptedPoint(
         val latitude: Double,
         val longitude: Double,
         val acceptedAt: Instant,
     )
-
-    private fun com.rastreo.vehicular.data.PendingTripPoint.toAcceptedPoint(): AcceptedPoint? {
-        val acceptedAt = runCatching { Instant.parse(timestamp) }.getOrNull() ?: return null
-        return AcceptedPoint(
-            latitude = latitude,
-            longitude = longitude,
-            acceptedAt = acceptedAt,
-        )
-    }
-
-    private data class PointValidation(
-        val isAccepted: Boolean,
-        val discardReason: String?,
-        val discardType: DiscardType?,
-        val elapsedSeconds: Long?,
-        val requiredDistanceMeters: Double?,
-        val actualDistanceMeters: Double?,
-    )
-
-    private enum class DiscardType {
-        PRECISION,
-        MINIMUM_TIME,
-        MINIMUM_DISTANCE,
-    }
 
     private enum class SyncResult {
         SUCCESS,
@@ -1535,10 +1329,6 @@ class AppViewModel(
     }
 
     private companion object {
-        private const val MAX_ACCEPTED_ACCURACY_METERS = 100f
-        private const val MIN_SECONDS_BETWEEN_ACCEPTED_POINTS = 5L
-        private const val PERMANENCE_POINT_SECONDS = 120L
-        private const val MIN_DISTANCE_DISCARDS_FOR_PERMANENCE = 2
         private const val PENDING_CLOSE_RETRY_INTERVAL_MS = 15_000L
     }
 }
@@ -1549,8 +1339,10 @@ class AppViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         val sessionStore = SessionStore(context)
         return AppViewModel(
+            appContext = context.applicationContext,
             sessionStore = sessionStore,
             pendingSyncStore = PendingSyncStore(context),
+            trackingStatusStore = TrackingStatusStore(context),
             repository = RastreoRepository(sessionStore),
             locationRepository = LocationRepository(context),
         ) as T

@@ -1,0 +1,19 @@
+- Me preparas un prompt para otro hilo, para seguir en el, explicando como venimos trabajando para desarrollar el sistema de rastreo_vehicular?
+Recuerda mencionar que el método es que contigo planeamos y tu le armas los prompts a codex indicándome si los debo pegar en el mismo hilo que el anterior o en uno nuevo. Además en el encabezado del prompt siempre la das instrucciones claras a codex para que sepa que proyecto es y que cuidados tener para no romper nada de lo anterior.
+También supongo que sería bueno mencionar los problemas que hemos resuelto e intentado resolver, por ejemplo el error 401 que fue el que al intentar resolverlo se rompió la app.
+
+
+
+- Te pido que generes un prompt para codex para que haga un diagnóstico general del código con todo lo que consideres necesario para asegurarnos que comprendes bien todos los detalles del proyecto.
+Luego te pego la respuesta de codex.
+
+
+
+
+
+
+- Prepárame un prompt para respaldar en git la situación actual. Con todas las precauciones que corresponda para que no se generen problemas.
+
+
+- Te recuerdo colocar todo lo que corresponda indicarle a codex dentro del cuadro de texto donde suele detallarse el prompt.
+  En caso que vayas a hacer más aclaraciones que deba pegarle a codex, genéralas en otro cuadro listo para copiar también.

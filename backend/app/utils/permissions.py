@@ -4,7 +4,7 @@ from sqlalchemy import false
 from app.models.trip import Trip
 from app.models.user import User, UserVehicleAccess
 
-ALLOWED_ROLES = {"admin", "user"}
+ALLOWED_ROLES = {"admin", "developer", "user"}
 
 
 def normalize_role(role: str) -> str:
@@ -23,6 +23,15 @@ def get_permissions_for_role(role: str) -> dict[str, bool]:
             "view_all_vehicles": True,
             "edit_trips": True,
             "delete_trips": True,
+            "view_debug_panel": True,
+        },
+        "developer": {
+            "manage_users": False,
+            "manage_vehicles": False,
+            "view_all_vehicles": False,
+            "edit_trips": False,
+            "delete_trips": False,
+            "view_debug_panel": True,
         },
         "user": {
             "manage_users": False,
@@ -30,6 +39,7 @@ def get_permissions_for_role(role: str) -> dict[str, bool]:
             "view_all_vehicles": False,
             "edit_trips": False,
             "delete_trips": False,
+            "view_debug_panel": False,
         },
     }
     return role_permissions.get(role, role_permissions["user"])
