@@ -35,6 +35,19 @@ router = APIRouter(prefix="/trips", tags=["trips"])
 MANUAL_TRIP_POINT_INTERVAL_SECONDS = 5
 
 
+def _ensure_vehicle_matches_user_company(vehicle: Vehicle, current_user: User) -> None:
+    if current_user.company_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user is not assigned to a company",
+        )
+    if vehicle.company_id != current_user.company_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found",
+        )
+
+
 def close_open_vehicle_trips(
     db: Session,
     vehicle_id: int,
@@ -129,6 +142,7 @@ def create_manual_trip(
             detail="Vehicle not found",
         )
     require_vehicle_access_or_404(db, current_user, trip_data.vehicle_id)
+    _ensure_vehicle_matches_user_company(vehicle, current_user)
 
     categoria = trip_data.categoria.strip()
     if not categoria:
@@ -169,6 +183,7 @@ def create_manual_trip(
     try:
         trip = Trip(
             vehicle_id=trip_data.vehicle_id,
+            company_id=vehicle.company_id,
             categoria=categoria,
             start_time=point_timestamps[0],
             end_time=point_timestamps[-1],
@@ -281,6 +296,7 @@ def split_trip(
     try:
         new_trip = Trip(
             vehicle_id=trip.vehicle_id,
+            company_id=trip.company_id,
             categoria=trip.categoria,
             start_time=split_point.timestamp,
             end_time=last_point.timestamp,
@@ -336,12 +352,14 @@ def start_trip(
             detail="Vehicle not found",
         )
     require_vehicle_access_or_404(db, current_user, trip_data.vehicle_id)
+    _ensure_vehicle_matches_user_company(vehicle, current_user)
 
     start_time = datetime.now()
     close_open_vehicle_trips(db, trip_data.vehicle_id, start_time)
 
     trip = Trip(
         vehicle_id=trip_data.vehicle_id,
+        company_id=vehicle.company_id,
         categoria=trip_data.categoria,
         start_time=start_time,
         status="active",

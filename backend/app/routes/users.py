@@ -16,8 +16,21 @@ from app.utils.security import hash_password
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-def get_user_or_404(db: Session, user_id: int) -> User:
-    user = db.query(User).filter(User.id == user_id).first()
+def _company_filter(model, company_id: int | None):
+    if company_id is None:
+        return model.company_id.is_(None)
+    return model.company_id == company_id
+
+
+def get_user_or_404(db: Session, current_admin: User, user_id: int) -> User:
+    user = (
+        db.query(User)
+        .filter(
+            User.id == user_id,
+            _company_filter(User, current_admin.company_id),
+        )
+        .first()
+    )
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -41,17 +54,28 @@ def ensure_username_available(db: Session, username: str, user_id: int | None = 
 @router.get("", response_model=list[UserResponse])
 def list_users(
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
 ):
-    return db.query(User).order_by(User.id).all()
+    return (
+        db.query(User)
+        .filter(_company_filter(User, current_admin.company_id))
+        .order_by(User.id)
+        .all()
+    )
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
 ):
+    if current_admin.company_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user is not assigned to a company",
+        )
+
     ensure_username_available(db, user_data.username)
 
     user = User(
@@ -59,6 +83,7 @@ def create_user(
         password_hash=hash_password(user_data.password),
         full_name=user_data.full_name,
         email=user_data.email,
+        company_id=current_admin.company_id,
         role=user_data.role,
         is_active=user_data.is_active,
     )
@@ -73,9 +98,9 @@ def update_user(
     user_id: int,
     user_data: UserUpdate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
 ):
-    user = get_user_or_404(db, user_id)
+    user = get_user_or_404(db, current_admin, user_id)
     update_data = user_data.model_dump(exclude_unset=True)
 
     if "username" in update_data:
@@ -100,7 +125,7 @@ def delete_user(
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin),
 ):
-    user = get_user_or_404(db, user_id)
+    user = get_user_or_404(db, current_admin, user_id)
     if user.id == current_admin.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -110,7 +135,11 @@ def delete_user(
     if user.role == "admin":
         active_admin_count = (
             db.query(User)
-            .filter(User.role == "admin", User.is_active.is_(True))
+            .filter(
+                User.role == "admin",
+                User.is_active.is_(True),
+                _company_filter(User, current_admin.company_id),
+            )
             .count()
         )
         if active_admin_count <= 1:
@@ -130,14 +159,16 @@ def delete_user(
 def get_user_vehicles(
     user_id: int,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
 ):
-    get_user_or_404(db, user_id)
+    get_user_or_404(db, current_admin, user_id)
     vehicle_ids = [
         vehicle_id
         for (vehicle_id,) in (
             db.query(UserVehicleAccess.vehicle_id)
+            .join(Vehicle, Vehicle.id == UserVehicleAccess.vehicle_id)
             .filter(UserVehicleAccess.user_id == user_id)
+            .filter(_company_filter(Vehicle, current_admin.company_id))
             .order_by(UserVehicleAccess.vehicle_id)
             .all()
         )
@@ -150,24 +181,40 @@ def replace_user_vehicles(
     user_id: int,
     assignment: UserVehicleAssignment,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
 ):
-    get_user_or_404(db, user_id)
+    user = get_user_or_404(db, current_admin, user_id)
     vehicle_ids = list(dict.fromkeys(assignment.vehicle_ids))
 
-    existing_vehicle_ids = {
-        vehicle_id
-        for (vehicle_id,) in db.query(Vehicle.id).filter(Vehicle.id.in_(vehicle_ids)).all()
-    }
-    missing_vehicle_ids = sorted(set(vehicle_ids) - existing_vehicle_ids)
+    company_vehicles = (
+        db.query(Vehicle)
+        .filter(
+            Vehicle.id.in_(vehicle_ids),
+            _company_filter(Vehicle, current_admin.company_id),
+        )
+        .all()
+    )
+    vehicles_by_id = {vehicle.id: vehicle for vehicle in company_vehicles}
+    missing_vehicle_ids = sorted(set(vehicle_ids) - set(vehicles_by_id))
     if missing_vehicle_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Vehicles not found: {missing_vehicle_ids}",
         )
 
+    if any(vehicle.company_id != user.company_id for vehicle in company_vehicles):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vehicle assignment must stay within the same company",
+        )
+
     db.query(UserVehicleAccess).filter(UserVehicleAccess.user_id == user_id).delete()
     for vehicle_id in vehicle_ids:
+        if vehicle_id not in vehicles_by_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Vehicles not found: [{vehicle_id}]",
+            )
         db.add(UserVehicleAccess(user_id=user_id, vehicle_id=vehicle_id))
 
     db.commit()

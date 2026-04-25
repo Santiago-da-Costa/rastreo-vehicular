@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -10,7 +10,6 @@ from app.services.trip_stops import update_trip_stops_for_new_point
 from app.utils.permissions import (
     get_accessible_trip_or_404,
     require_edit_trips,
-    user_can_access_trip,
 )
 
 router = APIRouter(prefix="/trips/{trip_id}/points", tags=["trip_points"])
@@ -41,11 +40,7 @@ def list_trip_points(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    if not user_can_access_trip(db, current_user, trip_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
+    get_accessible_trip_or_404(db, current_user, trip_id)
 
     return (
         db.query(TripPoint)

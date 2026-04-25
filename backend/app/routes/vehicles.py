@@ -17,6 +17,7 @@ from app.utils.permissions import (
     filter_trip_query_for_user,
     filter_vehicle_query_for_user,
     require_permission,
+    require_vehicle_access_or_404,
 )
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
@@ -225,7 +226,16 @@ def create_vehicle(
     current_user: User = Depends(get_current_active_user),
 ):
     require_permission(current_user, "manage_vehicles")
-    vehicle = Vehicle(**vehicle_data.model_dump())
+    if current_user.company_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user is not assigned to a company",
+        )
+
+    vehicle = Vehicle(
+        **vehicle_data.model_dump(),
+        company_id=current_user.company_id,
+    )
     db.add(vehicle)
     db.commit()
     db.refresh(vehicle)
@@ -239,6 +249,7 @@ def delete_vehicle(
     current_user: User = Depends(get_current_active_user),
 ):
     require_permission(current_user, "manage_vehicles")
+    require_vehicle_access_or_404(db, current_user, vehicle_id)
     vehicle = get_vehicle_or_404(db, vehicle_id)
     trip_count = db.query(Trip).filter(Trip.vehicle_id == vehicle_id).count()
     if trip_count:

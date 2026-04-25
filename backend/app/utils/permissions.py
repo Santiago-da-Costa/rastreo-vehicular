@@ -3,6 +3,7 @@ from sqlalchemy import false
 
 from app.models.trip import Trip
 from app.models.user import User, UserVehicleAccess
+from app.models.vehicle import Vehicle
 
 ALLOWED_ROLES = {"admin", "developer", "user"}
 
@@ -65,20 +66,31 @@ def require_delete_trips(user: User) -> None:
     require_permission(user, "delete_trips")
 
 
+def _company_filter(model, company_id: int | None):
+    if company_id is None:
+        return model.company_id.is_(None)
+    return model.company_id == company_id
+
+
 def get_accessible_vehicle_ids(db, user: User) -> list[int]:
     if user_has_permission(user, "view_all_vehicles"):
-        from app.models.vehicle import Vehicle
-
         return [
             vehicle_id
-            for (vehicle_id,) in db.query(Vehicle.id).order_by(Vehicle.id).all()
+            for (vehicle_id,) in (
+                db.query(Vehicle.id)
+                .filter(_company_filter(Vehicle, user.company_id))
+                .order_by(Vehicle.id)
+                .all()
+            )
         ]
 
     return [
         vehicle_id
         for (vehicle_id,) in (
             db.query(UserVehicleAccess.vehicle_id)
+            .join(Vehicle, Vehicle.id == UserVehicleAccess.vehicle_id)
             .filter(UserVehicleAccess.user_id == user.id)
+            .filter(_company_filter(Vehicle, user.company_id))
             .order_by(UserVehicleAccess.vehicle_id)
             .all()
         )
@@ -87,13 +99,23 @@ def get_accessible_vehicle_ids(db, user: User) -> list[int]:
 
 def user_can_access_vehicle(db, user: User, vehicle_id: int) -> bool:
     if user_has_permission(user, "view_all_vehicles"):
-        return True
+        return (
+            db.query(Vehicle.id)
+            .filter(
+                Vehicle.id == vehicle_id,
+                _company_filter(Vehicle, user.company_id),
+            )
+            .first()
+            is not None
+        )
 
     return (
         db.query(UserVehicleAccess.id)
+        .join(Vehicle, Vehicle.id == UserVehicleAccess.vehicle_id)
         .filter(
             UserVehicleAccess.user_id == user.id,
             UserVehicleAccess.vehicle_id == vehicle_id,
+            _company_filter(Vehicle, user.company_id),
         )
         .first()
         is not None
@@ -101,7 +123,14 @@ def user_can_access_vehicle(db, user: User, vehicle_id: int) -> bool:
 
 
 def user_can_access_trip(db, user: User, trip_id: int) -> bool:
-    trip_vehicle = db.query(Trip.vehicle_id).filter(Trip.id == trip_id).first()
+    trip_vehicle = (
+        db.query(Trip.vehicle_id)
+        .filter(
+            Trip.id == trip_id,
+            _company_filter(Trip, user.company_id),
+        )
+        .first()
+    )
     if trip_vehicle is None:
         return False
 
@@ -109,7 +138,14 @@ def user_can_access_trip(db, user: User, trip_id: int) -> bool:
 
 
 def get_accessible_trip_or_404(db, user: User, trip_id: int) -> Trip:
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    trip = (
+        db.query(Trip)
+        .filter(
+            Trip.id == trip_id,
+            _company_filter(Trip, user.company_id),
+        )
+        .first()
+    )
     if trip is None or not user_can_access_vehicle(db, user, trip.vehicle_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -128,6 +164,7 @@ def require_vehicle_access_or_404(db, user: User, vehicle_id: int) -> None:
 
 
 def filter_vehicle_query_for_user(query, db, user: User):
+    query = query.filter(_company_filter(Vehicle, user.company_id))
     if user_has_permission(user, "view_all_vehicles"):
         return query
 
@@ -135,14 +172,11 @@ def filter_vehicle_query_for_user(query, db, user: User):
     if not accessible_vehicle_ids:
         return query.filter(false())
 
-    from app.models.vehicle import Vehicle
-
     return query.filter(Vehicle.id.in_(accessible_vehicle_ids))
 
 
 def filter_trip_query_for_user(query, db, user: User):
-    if user_has_permission(user, "view_all_vehicles"):
-        return query
+    query = query.filter(_company_filter(Trip, user.company_id))
 
     accessible_vehicle_ids = get_accessible_vehicle_ids(db, user)
     if not accessible_vehicle_ids:
