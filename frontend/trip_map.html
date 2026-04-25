@@ -1931,6 +1931,7 @@
         let currentTripSummaries = [];
         let currentTripsWithPoints = [];
         let currentMode = "all";
+        let hasLoadedAllTripPoints = false;
         let selectedTripId = null;
         let speedDistanceChart = null;
         let speedChartPointRefs = [];
@@ -2926,6 +2927,16 @@
             }) || null;
         }
 
+        function getTripSummaryById(tripId) {
+            if (tripId == null) {
+                return null;
+            }
+
+            return currentTripSummaries.find(({ trip }) => {
+                return String(trip.id) === String(tripId);
+            }) || null;
+        }
+
         function getSelectedVehicleId() {
             return vehicleSelect.value;
         }
@@ -3544,7 +3555,7 @@
 
         function renderTripsList() {
             const selectedValue = selectedTripId == null ? "" : String(selectedTripId);
-            const tripItems = currentTripsWithPoints.length ? currentTripsWithPoints : currentTripSummaries;
+            const tripItems = currentTripSummaries.length ? currentTripSummaries : currentTripsWithPoints;
             tripSelect.innerHTML = '<option value="">Ver todos</option>';
 
             if (!tripItems.length) {
@@ -3562,6 +3573,32 @@
             });
 
             tripSelect.value = [...tripSelect.options].some((option) => option.value === selectedValue) ? selectedValue : "";
+        }
+
+        function resetLoadedTripPointsState({ preserveSelection = false } = {}) {
+            currentPoints = [];
+            currentTrip = null;
+            currentTrips = [];
+            currentTripId = null;
+            currentRouteSegments = [];
+            currentTripsWithPoints = [];
+            currentMode = "all";
+            hasLoadedAllTripPoints = false;
+
+            if (!preserveSelection) {
+                selectedTripId = null;
+                tripIdInput.value = "";
+                tripSelect.value = "";
+                isCategoryEditMode = false;
+                categoryEditTripId = null;
+                setSplitMode(false);
+                resetTripStopsState();
+            }
+
+            clearMap();
+            renderTripSummary(null);
+            renderTripsList();
+            updateTrackingSummaryBar();
         }
 
         function getPointStyle(point, index, totalPoints) {
@@ -3662,7 +3699,7 @@
             highlightMapPointFromChart(point);
         }
 
-        function selectTrip(tripId, fitMap = false) {
+        async function selectTrip(tripId, fitMap = false) {
             if (tripId == null) {
                 return;
             }
@@ -3674,6 +3711,14 @@
             selectedTripId = tripId;
             tripIdInput.value = tripId;
             tripSelect.value = String(tripId);
+
+            const selectedItem = getSelectedTripItem();
+            if (!selectedItem) {
+                updateTrackingSummaryBar();
+                await loadTripPoints({ fitMap, preserveTripSummaries: true });
+                return;
+            }
+
             redrawCurrentMap();
 
             if (fitMap) {
@@ -3692,7 +3737,12 @@
             setSplitMode(false);
             tripIdInput.value = "";
             tripSelect.value = "";
-            redrawCurrentMap();
+
+            if (currentMode === "single" && !hasLoadedAllTripPoints && currentTripSummaries.length) {
+                resetLoadedTripPointsState({ preserveSelection: true });
+            } else {
+                redrawCurrentMap();
+            }
 
             if (fitMap && currentPoints.length) {
                 centerRoute();
@@ -4715,10 +4765,9 @@
             tripIdInput.value = originalTripId;
             currentMode = "all";
             await loadAllTrips({ fitMap: false, showMessages: false });
-            if (getTripItemById(originalTripId)) {
-                selectTrip(originalTripId, false);
+            if (getTripSummaryById(originalTripId)) {
+                await selectTrip(originalTripId, true);
             }
-            centerRoute();
         }
 
         async function refreshAfterManualTripDelete() {
@@ -4894,7 +4943,7 @@
                     categoryFilterSelect.value = "";
                 }
                 await loadAllTrips({ fitMap: false, showMessages: false });
-                selectTrip(refreshedTrip.id, false);
+                await selectTrip(refreshedTrip.id, false);
             } else {
                 currentTripId = refreshedTrip.id;
                 currentTrip = refreshedTrip;
@@ -5267,7 +5316,7 @@
             openTripActionsPopup(getPointTripId(point), event.latlng);
         }
 
-        function drawPoints(points, fitMap = true) {
+        function drawPoints(points, fitMap = true, { preserveTripSummaries = false } = {}) {
             clearMap();
 
             const tripForPoints = currentTrip || (currentTripId ? { id: currentTripId } : null);
@@ -5277,9 +5326,12 @@
             }));
             currentPoints = orderedPoints;
             currentTrips = [];
-            setCurrentTripSummaries(tripForPoints ? [tripForPoints] : []);
+            if (!preserveTripSummaries) {
+                setCurrentTripSummaries(tripForPoints ? [tripForPoints] : []);
+            }
             currentTripsWithPoints = tripForPoints ? [{ trip: tripForPoints, points: orderedPoints }] : [];
             currentRouteSegments = [orderedPoints];
+            hasLoadedAllTripPoints = false;
             if (selectedTripId != null && !getSelectedTripItem()) {
                 selectedTripId = null;
                 tripIdInput.value = "";
@@ -5319,6 +5371,7 @@
             currentTripsWithPoints = [];
             currentRouteSegments = [];
             currentPoints = [];
+            hasLoadedAllTripPoints = true;
             if (selectedTripId != null && !tripsWithPoints.some(({ trip }) => String(trip.id) === String(selectedTripId))) {
                 selectedTripId = null;
                 tripIdInput.value = "";
@@ -5561,7 +5614,7 @@
                 tripIdInput.value = newTripId;
                 currentMode = "all";
                 await loadAllTrips({ fitMap: false, showMessages: false });
-                selectTrip(newTripId, true);
+                await selectTrip(newTripId, true);
                 setMessage(`Recorrido manual guardado: ${newTripId}.`);
             } catch (error) {
                 setMessage(`No se pudo guardar el recorrido manual: ${error.message}`, true);
@@ -5619,7 +5672,7 @@
             }
         }
 
-        async function loadTripPoints({ fitMap = true, showMessages = true, preserveOnError = false } = {}) {
+        async function loadTripPoints({ fitMap = true, showMessages = true, preserveOnError = false, preserveTripSummaries = null } = {}) {
             const tripId = tripIdInput.value.trim();
             if (!tripId) {
                 if (showMessages) {
@@ -5627,6 +5680,10 @@
                 }
                 return;
             }
+
+            const keepTripSummaries = preserveTripSummaries == null
+                ? (currentTripSummaries.length > 1 && !hasLoadedAllTripPoints)
+                : preserveTripSummaries;
 
             currentMode = "single";
             currentTripId = tripId;
@@ -5663,9 +5720,12 @@
                 if (!points.length) {
                     currentPoints = [];
                     currentTrips = [];
-                    setCurrentTripSummaries(currentTrip ? [currentTrip] : []);
+                    if (!keepTripSummaries) {
+                        setCurrentTripSummaries(currentTrip ? [currentTrip] : []);
+                    }
                     currentTripsWithPoints = [];
                     currentRouteSegments = [];
+                    hasLoadedAllTripPoints = false;
                     selectedTripId = null;
                     isCategoryEditMode = false;
                     categoryEditTripId = null;
@@ -5680,7 +5740,7 @@
                     return;
                 }
 
-                drawPoints(points, fitMap);
+                drawPoints(points, fitMap, { preserveTripSummaries: keepTripSummaries });
                 void loadTripStops(tripId);
                 if (showMessages) {
                     setMessage(`Recorrido cargado: ${points.length} punto(s). Categoría: ${getTripCategory()}.`);
@@ -5691,8 +5751,11 @@
                 }
 
                 currentPoints = [];
-                clearCurrentTripSummaries();
+                if (!keepTripSummaries) {
+                    clearCurrentTripSummaries();
+                }
                 currentTripsWithPoints = [];
+                hasLoadedAllTripPoints = false;
                 selectedTripId = null;
                 isCategoryEditMode = false;
                 categoryEditTripId = null;
@@ -5766,23 +5829,12 @@
                 if (!showMessages && preserveOnError && !canAutoRefreshNow()) {
                     return;
                 }
-                const tripsWithPoints = await loadTripPointsForSelection(filteredTrips);
-
-                if (isStaleDataLoad(loadVersion)) {
-                    return;
-                }
-
-                if (!showMessages && preserveOnError && !canAutoRefreshNow()) {
-                    return;
-                }
-
-                drawTrips(tripsWithPoints, fitMap);
+                resetLoadedTripPointsState();
 
                 if (showMessages) {
                     const totalTrips = filteredTrips.length;
-                    const totalPoints = currentPoints.length;
                     const filterText = activeDateFilterValues.start || activeDateFilterValues.end ? " con filtro aplicado" : "";
-                    setMessage(`Recorridos cargados${filterText}: ${totalTrips}. Puntos: ${totalPoints}.`);
+                    setMessage(`Recorridos listos${filterText}: ${totalTrips}. Seleccione un recorrido para ver sus puntos.`);
                 }
             } catch (error) {
                 if (!showMessages && preserveOnError) {
@@ -5796,6 +5848,7 @@
                 currentRouteSegments = [];
                 clearCurrentTripSummaries();
                 currentTripsWithPoints = [];
+                hasLoadedAllTripPoints = false;
                 selectedTripId = null;
                 isCategoryEditMode = false;
                 categoryEditTripId = null;
@@ -5812,6 +5865,65 @@
                     } else {
                         setMessage("No se pudieron cargar los recorridos. Revisa que el backend esté corriendo.", true);
                     }
+                }
+            } finally {
+                if (showMessages && !isStaleDataLoad(loadVersion)) {
+                    loadAllButton.disabled = false;
+                    applyDateFilterButton.disabled = !hasPendingDateFilterChanges();
+                    cancelDateFilterButton.disabled = !hasPendingDateFilterChanges();
+                    clearFilterButton.disabled = false;
+                }
+            }
+        }
+
+        async function loadAllTripPointsFromSummaries({ fitMap = true, showMessages = true, preserveOnError = false } = {}) {
+            currentMode = "all";
+
+            if (showMessages) {
+                loadAllButton.disabled = true;
+                applyDateFilterButton.disabled = true;
+                cancelDateFilterButton.disabled = true;
+                clearFilterButton.disabled = true;
+                setMessage("Cargando recorridos...");
+            }
+
+            const loadVersion = beginDataLoad();
+
+            try {
+                const summaryTrips = currentTripSummaries.map(({ trip }) => trip);
+                if (!summaryTrips.length) {
+                    resetLoadedTripPointsState();
+                    if (showMessages) {
+                        setMessage("No hay recorridos filtrados para cargar.");
+                    }
+                    return;
+                }
+
+                const tripsWithPoints = await loadTripPointsForSelection(summaryTrips);
+
+                if (isStaleDataLoad(loadVersion)) {
+                    return;
+                }
+
+                if (!showMessages && preserveOnError && !canAutoRefreshNow()) {
+                    return;
+                }
+
+                drawTrips(tripsWithPoints, fitMap);
+
+                if (showMessages) {
+                    const totalTrips = tripsWithPoints.length;
+                    const totalPoints = currentPoints.length;
+                    setMessage(`Recorridos cargados: ${totalTrips}. Puntos: ${totalPoints}.`);
+                }
+            } catch (error) {
+                if (!showMessages && preserveOnError) {
+                    return;
+                }
+
+                resetLoadedTripPointsState();
+                if (showMessages) {
+                    setMessage("No se pudieron cargar los puntos de los recorridos.", true);
                 }
             } finally {
                 if (showMessages && !isStaleDataLoad(loadVersion)) {
@@ -5925,7 +6037,11 @@
             isAutoRefreshLoading = true;
             try {
                 if (currentMode === "all") {
-                    await loadAllTrips({ fitMap: false, showMessages: false, preserveOnError: true });
+                    if (hasLoadedAllTripPoints) {
+                        await loadAllTripPointsFromSummaries({ fitMap: false, showMessages: false, preserveOnError: true });
+                    } else {
+                        await loadAllTrips({ fitMap: false, showMessages: false, preserveOnError: true });
+                    }
                 } else if (currentTripId || tripIdInput.value.trim()) {
                     await loadTripPoints({ fitMap: false, showMessages: false, preserveOnError: true });
                 }
@@ -6011,8 +6127,7 @@
         });
 
         loadAllButton.addEventListener("click", () => {
-            setActiveDateFilterValues({ start: "", end: "" }, { syncInputs: true });
-            loadAllTrips();
+            loadAllTripPointsFromSummaries();
         });
 
         loadTripButton.addEventListener("click", () => {
@@ -6192,7 +6307,7 @@
             loadAllTrips();
         });
 
-        tripSelect.addEventListener("change", () => {
+        tripSelect.addEventListener("change", async () => {
             if (!tripSelect.value) {
                 updateTrackingSummaryBar();
                 clearSelectedTrip({ fitMap: true });
@@ -6201,7 +6316,7 @@
 
             setSplitMode(false);
             updateTrackingSummaryBar();
-            selectTrip(tripSelect.value, false);
+            await selectTrip(tripSelect.value, true);
         });
 
         autoRefreshInput.addEventListener("change", () => {
