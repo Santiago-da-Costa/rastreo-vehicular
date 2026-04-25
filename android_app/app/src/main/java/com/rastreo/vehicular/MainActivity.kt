@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rastreo.vehicular.ui.AppViewModel
 import com.rastreo.vehicular.ui.AppViewModelFactory
 import com.rastreo.vehicular.ui.UiState
+import kotlin.math.max
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.Instant
@@ -103,6 +104,27 @@ class MainActivity : ComponentActivity() {
                                 permissionsLauncher.launch(buildTrackingPermissionsRequest())
                             }
                         },
+                        onDecreaseGpsObservationInterval = {
+                            viewModel.setGpsObservationIntervalSeconds(
+                                max(1L, uiState.gpsObservationIntervalMs / 1000L - 1L)
+                            )
+                        },
+                        onIncreaseGpsObservationInterval = {
+                            viewModel.setGpsObservationIntervalSeconds(
+                                uiState.gpsObservationIntervalMs / 1000L + 1L
+                            )
+                        },
+                        onDecreaseEvaluationInterval = {
+                            viewModel.setEvaluationIntervalSeconds(
+                                max(1L, uiState.evaluationIntervalMs / 1000L - 1L)
+                            )
+                        },
+                        onIncreaseEvaluationInterval = {
+                            viewModel.setEvaluationIntervalSeconds(
+                                uiState.evaluationIntervalMs / 1000L + 1L
+                            )
+                        },
+                        onResetTrackingConfigDefaults = viewModel::resetTrackingConfigDefaults,
                         onStopTracking = viewModel::stopTracking,
                         onRefreshVehicles = viewModel::loadVehicles,
                     )
@@ -135,6 +157,11 @@ private fun AppScreen(
     onVehicleSelected: (Int?) -> Unit,
     onCategoryChanged: (String) -> Unit,
     onStartTracking: () -> Unit,
+    onDecreaseGpsObservationInterval: () -> Unit,
+    onIncreaseGpsObservationInterval: () -> Unit,
+    onDecreaseEvaluationInterval: () -> Unit,
+    onIncreaseEvaluationInterval: () -> Unit,
+    onResetTrackingConfigDefaults: () -> Unit,
     onStopTracking: () -> Unit,
     onRefreshVehicles: () -> Unit,
 ) {
@@ -181,6 +208,11 @@ private fun AppScreen(
                 DeveloperDiagnosticsCard(
                     state = state,
                     currentTimeMillis = currentTimeMillis,
+                    onDecreaseGpsObservationInterval = onDecreaseGpsObservationInterval,
+                    onIncreaseGpsObservationInterval = onIncreaseGpsObservationInterval,
+                    onDecreaseEvaluationInterval = onDecreaseEvaluationInterval,
+                    onIncreaseEvaluationInterval = onIncreaseEvaluationInterval,
+                    onResetTrackingConfigDefaults = onResetTrackingConfigDefaults,
                 )
             }
         }
@@ -448,6 +480,11 @@ private fun StatusCard(state: UiState) {
 private fun DeveloperDiagnosticsCard(
     state: UiState,
     currentTimeMillis: Long,
+    onDecreaseGpsObservationInterval: () -> Unit,
+    onIncreaseGpsObservationInterval: () -> Unit,
+    onDecreaseEvaluationInterval: () -> Unit,
+    onIncreaseEvaluationInterval: () -> Unit,
+    onResetTrackingConfigDefaults: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -495,6 +532,25 @@ private fun DeveloperDiagnosticsCard(
                 ),
             )
             SummarySection(
+                title = "Parametros de tracking",
+                lines = listOf("Estos parametros son de prueba para el modo desarrollador."),
+            )
+            AdjustableTrackingParameterRow(
+                label = "Frecuencia observacion GPS",
+                value = formatSeconds(state.gpsObservationIntervalMs),
+                onDecrease = onDecreaseGpsObservationInterval,
+                onIncrease = onIncreaseGpsObservationInterval,
+            )
+            AdjustableTrackingParameterRow(
+                label = "Frecuencia evaluacion/registro",
+                value = formatSeconds(state.evaluationIntervalMs),
+                onDecrease = onDecreaseEvaluationInterval,
+                onIncrease = onIncreaseEvaluationInterval,
+            )
+            OutlinedButton(onClick = onResetTrackingConfigDefaults) {
+                Text("Restaurar valores por defecto")
+            }
+            SummarySection(
                 title = "Filtro GPS",
                 lines = listOf(
                     "Distancia al ultimo punto aceptado: ${formatDistance(state.lastFilterActualDistanceMeters)}",
@@ -515,6 +571,33 @@ private fun DeveloperDiagnosticsCard(
                     "Ultimo mensaje operativo: ${state.operationMessage.ifBlank { "Sin dato" }}",
                 ),
             )
+        }
+    }
+}
+
+@Composable
+private fun AdjustableTrackingParameterRow(
+    label: String,
+    value: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedButton(onClick = onDecrease, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+            Text("-")
+        }
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        OutlinedButton(onClick = onIncrease, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+            Text("+")
         }
     }
 }
@@ -671,6 +754,10 @@ private fun formatDistance(value: Double?): String {
 
 private fun formatMillis(value: Long?): String {
     return value?.let { "${it} ms" } ?: "No disponible"
+}
+
+private fun formatSeconds(value: Long): String {
+    return String.format("%.1f s", value / 1000.0)
 }
 
 private fun formatRequiredDistance(state: UiState): String {

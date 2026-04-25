@@ -10,6 +10,7 @@ import com.rastreo.vehicular.data.PendingTripPointDraft
 import com.rastreo.vehicular.data.RefreshTransientException
 import com.rastreo.vehicular.data.RastreoRepository
 import com.rastreo.vehicular.data.SessionStore
+import com.rastreo.vehicular.data.TrackingConfigStore
 import com.rastreo.vehicular.data.TrackingStatus
 import com.rastreo.vehicular.data.TrackingStatusStore
 import com.rastreo.vehicular.data.TripPointRequest
@@ -41,6 +42,8 @@ data class UiState(
     val category: String = "",
     val currentTripId: Int? = null,
     val trackingStartedAt: String = "Sin dato",
+    val gpsObservationIntervalMs: Long = TrackingConfigStore.DEFAULT_GPS_OBSERVATION_INTERVAL_MS,
+    val evaluationIntervalMs: Long = TrackingConfigStore.DEFAULT_EVALUATION_INTERVAL_MS,
     val loopStartedAt: String = "Sin dato",
     val loopFinishedAt: String = "Sin dato",
     val loopDurationMs: Long? = null,
@@ -106,6 +109,7 @@ class AppViewModel(
     private val appContext: Context,
     private val sessionStore: SessionStore,
     private val pendingSyncStore: PendingSyncStore,
+    private val trackingConfigStore: TrackingConfigStore,
     private val trackingStatusStore: TrackingStatusStore,
     private val repository: RastreoRepository,
     private val locationRepository: LocationRepository,
@@ -121,6 +125,7 @@ class AppViewModel(
     private val pendingCloseSyncMutex = Mutex()
 
     init {
+        observeTrackingConfig()
         observeTrackingStatus()
     }
 
@@ -289,6 +294,19 @@ class AppViewModel(
         }
     }
 
+    private fun observeTrackingConfig() {
+        viewModelScope.launch {
+            trackingConfigStore.trackingConfig.collect { config ->
+                _uiState.update { state ->
+                    state.copy(
+                        gpsObservationIntervalMs = config.gpsObservationIntervalMs,
+                        evaluationIntervalMs = config.evaluationIntervalMs,
+                    )
+                }
+            }
+        }
+    }
+
     private fun buildLastLocationText(status: TrackingStatus): String {
         val latitude = status.lastLatitude
         val longitude = status.lastLongitude
@@ -350,6 +368,24 @@ class AppViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun setGpsObservationIntervalSeconds(seconds: Long) {
+        viewModelScope.launch {
+            trackingConfigStore.setGpsObservationIntervalMs(seconds * 1_000L)
+        }
+    }
+
+    fun setEvaluationIntervalSeconds(seconds: Long) {
+        viewModelScope.launch {
+            trackingConfigStore.setEvaluationIntervalMs(seconds * 1_000L)
+        }
+    }
+
+    fun resetTrackingConfigDefaults() {
+        viewModelScope.launch {
+            trackingConfigStore.resetDefaults()
         }
     }
 
@@ -1368,6 +1404,7 @@ class AppViewModelFactory(
             appContext = context.applicationContext,
             sessionStore = sessionStore,
             pendingSyncStore = PendingSyncStore(context),
+            trackingConfigStore = TrackingConfigStore(context),
             trackingStatusStore = TrackingStatusStore(context),
             repository = RastreoRepository(sessionStore),
             locationRepository = LocationRepository(context),
