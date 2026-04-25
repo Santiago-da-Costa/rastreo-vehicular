@@ -747,6 +747,123 @@
             margin-top: 4px;
         }
 
+        .period-trigger-button {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #1f2933;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .period-trigger-button::after {
+            content: "Editar";
+            color: #1d7a8c;
+            font-size: 0.78rem;
+            font-weight: bold;
+        }
+
+        .period-trigger-text {
+            color: #52616f;
+            line-height: 1.35;
+        }
+
+        .period-trigger-text.active {
+            color: #1f2933;
+            font-weight: 600;
+        }
+
+        .period-hidden-inputs {
+            display: none;
+        }
+
+        .period-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1400;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.48);
+        }
+
+        .period-modal.visible {
+            display: flex;
+        }
+
+        .period-modal-dialog {
+            width: min(460px, 100%);
+            display: grid;
+            gap: 14px;
+            padding: 18px;
+            border-radius: 18px;
+            background: #ffffff;
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+        }
+
+        .period-modal-title {
+            margin: 0;
+            font-size: 1rem;
+            color: #1f2933;
+        }
+
+        .period-modal-copy {
+            margin: 0;
+            color: #52616f;
+            font-size: 0.84rem;
+            line-height: 1.4;
+        }
+
+        .period-modal-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .period-modal-actions {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .period-modal-error {
+            min-height: 18px;
+            margin: 0;
+            color: #b42318;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .empty-map-status {
+            position: absolute;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            z-index: 640;
+            max-width: min(520px, calc(100% - 170px));
+            padding: 10px 16px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.94);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+            color: #334155;
+            font-size: 0.84rem;
+            line-height: 1.35;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .empty-map-status.hidden {
+            display: none;
+        }
+
         .accordion-list {
             display: grid;
             gap: 12px;
@@ -1402,11 +1519,13 @@
                     <section class="control-group date-filter-section" id="date-filter-section" aria-labelledby="period-filter-title">
                     <h3 class="control-group-title" id="period-filter-title">Selección de período</h3>
                     <div class="field">
-                        <label for="filter-start">Inicio</label>
-                        <input id="filter-start" name="filter-start" type="datetime-local">
+                        <label for="period-trigger-button">Período</label>
+                        <button id="period-trigger-button" class="period-trigger-button" type="button" aria-haspopup="dialog" aria-expanded="false">
+                            <span class="period-trigger-text" id="period-trigger-text">Todo</span>
+                        </button>
                     </div>
-                    <div class="field">
-                        <label for="filter-end">Fin</label>
+                    <div class="period-hidden-inputs" aria-hidden="true">
+                        <input id="filter-start" name="filter-start" type="datetime-local">
                         <input id="filter-end" name="filter-end" type="datetime-local">
                     </div>
                     <p class="date-filter-status" id="date-filter-status">Sin cambios pendientes en fechas.</p>
@@ -1503,6 +1622,7 @@
                 <div class="map-floating-action left">
                     <button id="clear-filter-button" class="secondary-button map-floating-button" type="button">Limpiar filtros</button>
                 </div>
+                <div class="empty-map-status" id="empty-map-status" aria-live="polite">Seleccione y aplique filtros para ver recorridos</div>
                 <div class="map-floating-action right">
                     <button id="center-route-button" class="map-floating-button" type="button">Centrar mapa</button>
                 </div>
@@ -1665,6 +1785,28 @@
         crossorigin=""
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <div class="period-modal" id="period-modal" aria-hidden="true">
+        <div class="period-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="period-modal-title">
+            <h2 class="period-modal-title" id="period-modal-title">Período</h2>
+            <p class="period-modal-copy">Seleccione el inicio y el fin del rango para actualizar la lista de recorridos sin cargar puntos en el mapa.</p>
+            <div class="period-modal-grid">
+                <div class="field">
+                    <label for="period-modal-start">Inicio</label>
+                    <input id="period-modal-start" type="datetime-local">
+                </div>
+                <div class="field">
+                    <label for="period-modal-end">Fin</label>
+                    <input id="period-modal-end" type="datetime-local">
+                </div>
+            </div>
+            <p class="period-modal-error" id="period-modal-error" aria-live="polite"></p>
+            <div class="period-modal-actions">
+                <button id="period-modal-accept-button" type="button">Aceptar</button>
+                <button id="period-modal-cancel-button" class="secondary-button" type="button">Cancelar</button>
+                <button id="period-modal-clear-button" class="secondary-button" type="button">Todo</button>
+            </div>
+        </div>
+    </div>
     <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
     <script>
@@ -1831,6 +1973,15 @@
         const dateFilterSection = document.getElementById("date-filter-section");
         const dateFilterStatus = document.getElementById("date-filter-status");
         const dateFilterActions = document.getElementById("date-filter-actions");
+        const periodTriggerButton = document.getElementById("period-trigger-button");
+        const periodTriggerText = document.getElementById("period-trigger-text");
+        const periodModal = document.getElementById("period-modal");
+        const periodModalStartInput = document.getElementById("period-modal-start");
+        const periodModalEndInput = document.getElementById("period-modal-end");
+        const periodModalError = document.getElementById("period-modal-error");
+        const periodModalAcceptButton = document.getElementById("period-modal-accept-button");
+        const periodModalCancelButton = document.getElementById("period-modal-cancel-button");
+        const periodModalClearButton = document.getElementById("period-modal-clear-button");
         const applyDateFilterButton = document.getElementById("apply-date-filter-button");
         const cancelDateFilterButton = document.getElementById("cancel-date-filter-button");
         const clearFilterButton = document.getElementById("clear-filter-button");
@@ -1857,6 +2008,7 @@
         const pinVehicleButton = document.getElementById("pin-vehicle-button");
         const liveTrackingStatus = document.getElementById("live-tracking-status");
         const pinnedVehiclePanel = document.getElementById("pinned-vehicle-panel");
+        const emptyMapStatus = document.getElementById("empty-map-status");
         const message = document.getElementById("message");
         const tripSummary = document.getElementById("trip-summary");
         const categoryLegend = document.getElementById("category-legend");
@@ -1986,6 +2138,7 @@
         let pendingCategoryTripId = null;
         let dataLoadVersion = 0;
         let tripStopsRequestVersion = 0;
+        let isPeriodModalOpen = false;
         let tripLoadDiagnostics = {
             summariesStartedAt: 0,
             summariesDurationMs: 0,
@@ -2163,6 +2316,80 @@
             message.textContent = text;
             message.classList.toggle("error", isError);
             updateTrackingSummaryBar();
+        }
+
+        function updateEmptyMapStatus() {
+            if (!emptyMapStatus) {
+                return;
+            }
+
+            const hasRouteContent = currentPoints.length || currentTripsWithPoints.length || currentRouteSegments.length;
+            const shouldShow = !hasRouteContent && !isManualDrawingMode;
+            emptyMapStatus.classList.toggle("hidden", !shouldShow);
+        }
+
+        function getPeriodLabel(values = activeDateFilterValues) {
+            if (!values?.start && !values?.end) {
+                return "Todo";
+            }
+
+            const startLabel = values.start ? formatDateTime(values.start) : "Sin inicio";
+            const endLabel = values.end ? formatDateTime(values.end) : "Sin fin";
+            return `${startLabel} - ${endLabel}`;
+        }
+
+        function updatePeriodTriggerLabel() {
+            if (!periodTriggerText) {
+                return;
+            }
+
+            const label = getPeriodLabel();
+            periodTriggerText.textContent = label;
+            periodTriggerText.classList.toggle("active", Boolean(activeDateFilterValues.start || activeDateFilterValues.end));
+        }
+
+        function syncPeriodModalInputs(values = activeDateFilterValues) {
+            if (!periodModalStartInput || !periodModalEndInput) {
+                return;
+            }
+
+            periodModalStartInput.value = values?.start || "";
+            periodModalEndInput.value = values?.end || "";
+        }
+
+        function setPeriodModalOpen(open) {
+            if (!periodModal || !periodTriggerButton) {
+                return;
+            }
+
+            isPeriodModalOpen = Boolean(open);
+            periodModal.classList.toggle("visible", isPeriodModalOpen);
+            periodModal.setAttribute("aria-hidden", String(!isPeriodModalOpen));
+            periodTriggerButton.setAttribute("aria-expanded", String(isPeriodModalOpen));
+
+            if (!isPeriodModalOpen) {
+                if (periodModalError) {
+                    periodModalError.textContent = "";
+                }
+                return;
+            }
+
+            syncPeriodModalInputs();
+            if (periodModalError) {
+                periodModalError.textContent = "";
+            }
+            window.setTimeout(() => {
+                periodModalStartInput?.focus();
+            }, 0);
+        }
+
+        async function applyPeriodValues(values, { closeModal = true } = {}) {
+            parseDateFilterRange(values);
+            setActiveDateFilterValues(values, { syncInputs: true });
+            if (closeModal) {
+                setPeriodModalOpen(false);
+            }
+            await loadAllTrips();
         }
 
         function setSidebarContext(viewName) {
@@ -2513,6 +2740,12 @@
         }
 
         function hasActiveTrackingFilters() {
+            const hasRenderedTrips = Boolean(
+                currentPoints.length
+                || currentTripsWithPoints.length
+                || currentRouteSegments.length
+            );
+
             return Boolean(
                 trackingUserSelect.value
                 || vehicleSelect.value
@@ -2522,6 +2755,7 @@
                 || tripSelect.value
                 || selectedTripId != null
                 || tripIdInput.value
+                || hasRenderedTrips
             );
         }
 
@@ -3472,7 +3706,7 @@
             vehicleIds.forEach((vehicleId) => {
                 const option = document.createElement("option");
                 option.value = vehicleId;
-                option.textContent = `VehÃ­culo ${vehicleId}`;
+                option.textContent = `Vehículo ${vehicleId}`;
                 vehicleSelect.appendChild(option);
             });
 
@@ -3481,7 +3715,7 @@
             } else if (selectedVehicleId) {
                 const option = document.createElement("option");
                 option.value = selectedVehicleId;
-                option.textContent = `VehÃ­culo ${selectedVehicleId}`;
+                option.textContent = `Vehículo ${selectedVehicleId}`;
                 vehicleSelect.appendChild(option);
                 vehicleSelect.value = selectedVehicleId;
             } else {
@@ -3636,6 +3870,7 @@
             renderTripSummary(null);
             renderTripsList();
             updateTrackingSummaryBar();
+            updateEmptyMapStatus();
         }
 
         function getPointStyle(point, index, totalPoints) {
@@ -3860,6 +4095,7 @@
             }
 
             updateDateFilterUi();
+            updatePeriodTriggerLabel();
         }
 
         function restoreDraftDateFilters() {
@@ -5261,6 +5497,8 @@
                 map.removeLayer(routeLine);
                 routeLine = null;
             }
+
+            updateEmptyMapStatus();
         }
 
         function restoreRouteLine() {
@@ -5425,6 +5663,7 @@
             renderCurrentTripStops();
             renderTripSummary(currentTrip);
             renderTripsList();
+            updateEmptyMapStatus();
 
             if (!fitMap) {
                 return;
@@ -5481,6 +5720,7 @@
             renderCurrentTripStops();
             renderTripSummary(null);
             renderTripsList();
+            updateEmptyMapStatus();
 
             if (!fitMap) {
                 return;
@@ -5529,6 +5769,7 @@
             setManualDrawControlsState();
             updateAutoRefreshStatus(getAutoRefreshPauseReason());
             updateTrackingSummaryBar();
+            updateEmptyMapStatus();
         }
 
         function clearManualDrawLayer() {
@@ -6156,6 +6397,54 @@
             updateDateFilterUi();
         });
 
+        if (periodTriggerButton) {
+            periodTriggerButton.addEventListener("click", () => {
+                setPeriodModalOpen(true);
+            });
+        }
+
+        if (periodModal) {
+            periodModal.addEventListener("click", (event) => {
+                if (event.target === periodModal) {
+                    setPeriodModalOpen(false);
+                }
+            });
+        }
+
+        if (periodModalCancelButton) {
+            periodModalCancelButton.addEventListener("click", () => {
+                setPeriodModalOpen(false);
+            });
+        }
+
+        if (periodModalAcceptButton) {
+            periodModalAcceptButton.addEventListener("click", async () => {
+                const nextValues = {
+                    start: periodModalStartInput ? periodModalStartInput.value || "" : "",
+                    end: periodModalEndInput ? periodModalEndInput.value || "" : ""
+                };
+
+                try {
+                    await applyPeriodValues(nextValues);
+                } catch (error) {
+                    if (periodModalError) {
+                        periodModalError.textContent = error.message === "inverted-filter"
+                            ? "El inicio del filtro no puede ser posterior al fin."
+                            : "El rango de fecha/hora no es valido.";
+                    }
+                }
+            });
+        }
+
+        if (periodModalClearButton) {
+            periodModalClearButton.addEventListener("click", async () => {
+                if (periodModalError) {
+                    periodModalError.textContent = "";
+                }
+                await applyPeriodValues({ start: "", end: "" });
+            });
+        }
+
         filterStartInput.addEventListener("change", async () => {
             try {
                 const nextValues = getDateFilterDraftValues();
@@ -6702,6 +6991,11 @@
         });
 
         window.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && isPeriodModalOpen) {
+                setPeriodModalOpen(false);
+                return;
+            }
+
             if (event.key === "Escape" && isSidebarOpen) {
                 setSidebarOpen(false);
             }
@@ -6724,6 +7018,8 @@
             updateManualDrawUi();
             updateLiveTrackingControls();
             updateTrackingSummaryBar();
+            updatePeriodTriggerLabel();
+            updateEmptyMapStatus();
             startLivePositionsRefresh();
             loadAllTrips();
             loadLiveVehiclePositions({ showErrors: true });
