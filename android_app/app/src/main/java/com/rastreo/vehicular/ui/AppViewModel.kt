@@ -126,6 +126,7 @@ class AppViewModel(
 
     init {
         observeTrackingConfig()
+        observePendingSyncState()
         observeTrackingStatus()
     }
 
@@ -301,6 +302,45 @@ class AppViewModel(
                     state.copy(
                         gpsObservationIntervalMs = config.gpsObservationIntervalMs,
                         evaluationIntervalMs = config.evaluationIntervalMs,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun observePendingSyncState() {
+        viewModelScope.launch {
+            pendingSyncStore.pendingSyncState.collect { pendingSyncState ->
+                val pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId
+                val pendingCloseTripId = pendingSyncState.pendingClose?.tripId
+                val hasActiveTrip = pendingSyncState.activeTripId != null && pendingCloseTripId == null
+                val storedTripId = pendingCloseTripId
+                    ?: pendingSyncState.activeTripId
+                    ?: pendingQueueTripId
+
+                _uiState.update { state ->
+                    state.copy(
+                        currentTripId = when {
+                            state.isTracking -> state.currentTripId ?: storedTripId
+                            storedTripId != null -> storedTripId
+                            else -> state.currentTripId
+                        },
+                        isTracking = when {
+                            state.isTracking -> true
+                            hasActiveTrip -> true
+                            else -> false
+                        },
+                        pendingTripClose = pendingSyncState.pendingClose != null,
+                        pendingPointCount = pendingSyncState.pendingPoints.size,
+                        pendingQueueTripId = pendingQueueTripId,
+                        pendingCloseTripId = pendingCloseTripId,
+                        autoCloseRetryStatus = if (pendingCloseTripId == null &&
+                            pendingCloseRetryJob?.isActive != true
+                        ) {
+                            "Sin cierre pendiente"
+                        } else {
+                            state.autoCloseRetryStatus
+                        },
                     )
                 }
             }
