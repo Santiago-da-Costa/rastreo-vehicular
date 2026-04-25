@@ -841,6 +841,49 @@
             line-height: 1.35;
         }
 
+        .stats-modal-dialog {
+            width: min(640px, 100%);
+            gap: 18px;
+            padding: 24px;
+        }
+
+        .stats-modal-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .stats-modal-card {
+            display: grid;
+            gap: 8px;
+            padding: 18px;
+            border: 1px solid #d7dde3;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+        }
+
+        .stats-modal-label {
+            margin: 0;
+            color: #52616f;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .stats-modal-value {
+            margin: 0;
+            color: #102a43;
+            font-size: 1.7rem;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+
+        .stats-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+
         .empty-map-status {
             position: absolute;
             left: 50%;
@@ -861,6 +904,30 @@
         }
 
         .empty-map-status.hidden {
+            display: none;
+        }
+
+        .map-stats-trigger {
+            position: absolute;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            z-index: 640;
+            width: auto;
+            max-width: min(520px, calc(100% - 170px));
+            padding: 10px 16px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+            color: #102a43;
+            font-size: 0.84rem;
+            font-weight: 600;
+            line-height: 1.35;
+            text-align: center;
+        }
+
+        .map-stats-trigger.hidden {
             display: none;
         }
 
@@ -1421,6 +1488,14 @@
                 width: auto;
             }
 
+            .stats-modal-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-modal-dialog {
+                padding: 20px;
+            }
+
             .speed-chart-panel {
                 padding: 12px;
             }
@@ -1623,6 +1698,7 @@
                     <button id="clear-filter-button" class="secondary-button map-floating-button" type="button">Limpiar filtros</button>
                 </div>
                 <div class="empty-map-status" id="empty-map-status" aria-live="polite">Seleccione y aplique filtros para ver recorridos</div>
+                <button id="filter-stats-button" class="map-stats-trigger hidden" type="button" aria-haspopup="dialog" aria-expanded="false">Estadísticas de filtros aplicados</button>
                 <div class="map-floating-action right">
                     <button id="center-route-button" class="map-floating-button" type="button">Centrar mapa</button>
                 </div>
@@ -1807,6 +1883,29 @@
             </div>
         </div>
     </div>
+    <div class="period-modal" id="filter-stats-modal" aria-hidden="true">
+        <div class="period-modal-dialog stats-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="filter-stats-modal-title">
+            <h2 class="period-modal-title" id="filter-stats-modal-title">Estadísticas de filtros aplicados</h2>
+            <p class="period-modal-copy">Resumen calculado con los recorridos actualmente cargados y dibujados en el mapa.</p>
+            <div class="stats-modal-grid">
+                <article class="stats-modal-card">
+                    <p class="stats-modal-label">Distancia total recorrida</p>
+                    <p class="stats-modal-value" id="filter-stats-total-distance">0,00 km</p>
+                </article>
+                <article class="stats-modal-card">
+                    <p class="stats-modal-label">Velocidad máxima</p>
+                    <p class="stats-modal-value" id="filter-stats-max-speed">0,0 km/h</p>
+                </article>
+                <article class="stats-modal-card">
+                    <p class="stats-modal-label">Velocidad promedio</p>
+                    <p class="stats-modal-value" id="filter-stats-average-speed">0,0 km/h</p>
+                </article>
+            </div>
+            <div class="stats-modal-actions">
+                <button id="filter-stats-modal-close-button" class="secondary-button" type="button">Cerrar</button>
+            </div>
+        </div>
+    </div>
     <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
     <script>
@@ -1982,6 +2081,12 @@
         const periodModalAcceptButton = document.getElementById("period-modal-accept-button");
         const periodModalCancelButton = document.getElementById("period-modal-cancel-button");
         const periodModalClearButton = document.getElementById("period-modal-clear-button");
+        const filterStatsButton = document.getElementById("filter-stats-button");
+        const filterStatsModal = document.getElementById("filter-stats-modal");
+        const filterStatsTotalDistance = document.getElementById("filter-stats-total-distance");
+        const filterStatsMaxSpeed = document.getElementById("filter-stats-max-speed");
+        const filterStatsAverageSpeed = document.getElementById("filter-stats-average-speed");
+        const filterStatsModalCloseButton = document.getElementById("filter-stats-modal-close-button");
         const applyDateFilterButton = document.getElementById("apply-date-filter-button");
         const cancelDateFilterButton = document.getElementById("cancel-date-filter-button");
         const clearFilterButton = document.getElementById("clear-filter-button");
@@ -2139,6 +2244,7 @@
         let dataLoadVersion = 0;
         let tripStopsRequestVersion = 0;
         let isPeriodModalOpen = false;
+        let isFilterStatsModalOpen = false;
         let tripLoadDiagnostics = {
             summariesStartedAt: 0,
             summariesDurationMs: 0,
@@ -2318,14 +2424,27 @@
             updateTrackingSummaryBar();
         }
 
-        function updateEmptyMapStatus() {
-            if (!emptyMapStatus) {
-                return;
+        function hasVisibleRouteContent() {
+            const hasRouteContent = currentPoints.length || currentTripsWithPoints.length || currentRouteSegments.length;
+            return Boolean(hasRouteContent);
+        }
+
+        function updateMapOverlayState() {
+            const hasRouteContent = hasVisibleRouteContent();
+
+            if (emptyMapStatus) {
+                const shouldShowEmptyState = !hasRouteContent && !isManualDrawingMode;
+                emptyMapStatus.classList.toggle("hidden", !shouldShowEmptyState);
             }
 
-            const hasRouteContent = currentPoints.length || currentTripsWithPoints.length || currentRouteSegments.length;
-            const shouldShow = !hasRouteContent && !isManualDrawingMode;
-            emptyMapStatus.classList.toggle("hidden", !shouldShow);
+            if (filterStatsButton) {
+                filterStatsButton.classList.toggle("hidden", !hasRouteContent);
+                filterStatsButton.setAttribute("aria-expanded", String(isFilterStatsModalOpen && hasRouteContent));
+            }
+
+            if (!hasRouteContent && isFilterStatsModalOpen) {
+                setFilterStatsModalOpen(false);
+            }
         }
 
         function getPeriodLabel(values = activeDateFilterValues) {
@@ -2380,6 +2499,27 @@
             }
             window.setTimeout(() => {
                 periodModalStartInput?.focus();
+            }, 0);
+        }
+
+        function setFilterStatsModalOpen(open) {
+            if (!filterStatsModal || !filterStatsButton) {
+                return;
+            }
+
+            const shouldOpen = Boolean(open) && hasVisibleRouteContent();
+            isFilterStatsModalOpen = shouldOpen;
+            filterStatsModal.classList.toggle("visible", shouldOpen);
+            filterStatsModal.setAttribute("aria-hidden", String(!shouldOpen));
+            filterStatsButton.setAttribute("aria-expanded", String(shouldOpen));
+
+            if (!shouldOpen) {
+                return;
+            }
+
+            updateFilterStatsModalContent();
+            window.setTimeout(() => {
+                filterStatsModalCloseButton?.focus();
             }, 0);
         }
 
@@ -2858,6 +2998,93 @@
 
                 return maxSpeed == null ? speed : Math.max(maxSpeed, speed);
             }, null);
+        }
+
+        function getCurrentStatsTripItems() {
+            if (currentTripsWithPoints.length) {
+                return currentTripsWithPoints.filter(({ points }) => Array.isArray(points) && points.length);
+            }
+
+            if (currentPoints.length) {
+                return [{
+                    trip: currentTrip || (currentTripId ? { id: currentTripId } : null),
+                    points: currentPoints
+                }];
+            }
+
+            return [];
+        }
+
+        function getPointTimestampMillis(point) {
+            if (!point || !point.timestamp) {
+                return null;
+            }
+
+            const timestamp = new Date(point.timestamp).getTime();
+            return Number.isNaN(timestamp) ? null : timestamp;
+        }
+
+        function calculateFilterStats() {
+            const tripItems = getCurrentStatsTripItems();
+            const allPoints = tripItems.flatMap(({ points }) => points);
+            let totalDistanceMeters = 0;
+            let totalDurationSeconds = 0;
+            let simpleSpeedSum = 0;
+            let simpleSpeedCount = 0;
+
+            tripItems.forEach(({ points }) => {
+                const orderedPoints = getChronologicalPoints(points);
+                totalDistanceMeters += calculateSegmentDistance(orderedPoints);
+
+                orderedPoints.forEach((point) => {
+                    const speed = Number(point.speed);
+                    if (!Number.isNaN(speed)) {
+                        simpleSpeedSum += speed;
+                        simpleSpeedCount += 1;
+                    }
+                });
+
+                const firstTimestamp = orderedPoints.length ? getPointTimestampMillis(orderedPoints[0]) : null;
+                const lastTimestamp = orderedPoints.length ? getPointTimestampMillis(orderedPoints[orderedPoints.length - 1]) : null;
+                if (firstTimestamp != null && lastTimestamp != null && lastTimestamp > firstTimestamp) {
+                    totalDurationSeconds += (lastTimestamp - firstTimestamp) / 1000;
+                }
+            });
+
+            const maxSpeedMetersPerSecond = calculateMaxSpeed(allPoints);
+            // Frontend ya usa speed en m/s y la convierte a km/h en el gráfico.
+            const averageSpeedMetersPerSecond = totalDurationSeconds > 0
+                ? totalDistanceMeters / totalDurationSeconds
+                // Fallback mínimo seguro si faltan timestamps útiles.
+                : (simpleSpeedCount > 0 ? simpleSpeedSum / simpleSpeedCount : null);
+
+            return {
+                totalDistanceMeters,
+                maxSpeedMetersPerSecond,
+                averageSpeedMetersPerSecond
+            };
+        }
+
+        function formatLocalizedNumber(value, digits = 2) {
+            return new Intl.NumberFormat("es-UY", {
+                minimumFractionDigits: digits,
+                maximumFractionDigits: digits
+            }).format(value);
+        }
+
+        function updateFilterStatsModalContent() {
+            if (!filterStatsTotalDistance || !filterStatsMaxSpeed || !filterStatsAverageSpeed) {
+                return;
+            }
+
+            const stats = calculateFilterStats();
+            filterStatsTotalDistance.textContent = `${formatLocalizedNumber(stats.totalDistanceMeters / 1000, 2)} km`;
+            filterStatsMaxSpeed.textContent = stats.maxSpeedMetersPerSecond == null
+                ? "Sin dato"
+                : `${formatLocalizedNumber(stats.maxSpeedMetersPerSecond * 3.6, 1)} km/h`;
+            filterStatsAverageSpeed.textContent = stats.averageSpeedMetersPerSecond == null
+                ? "Sin dato"
+                : `${formatLocalizedNumber(stats.averageSpeedMetersPerSecond * 3.6, 1)} km/h`;
         }
 
         function formatSpeedMetersPerSecond(speed) {
@@ -3870,7 +4097,7 @@
             renderTripSummary(null);
             renderTripsList();
             updateTrackingSummaryBar();
-            updateEmptyMapStatus();
+            updateMapOverlayState();
         }
 
         function getPointStyle(point, index, totalPoints) {
@@ -5498,7 +5725,7 @@
                 routeLine = null;
             }
 
-            updateEmptyMapStatus();
+            updateMapOverlayState();
         }
 
         function restoreRouteLine() {
@@ -5663,7 +5890,7 @@
             renderCurrentTripStops();
             renderTripSummary(currentTrip);
             renderTripsList();
-            updateEmptyMapStatus();
+            updateMapOverlayState();
 
             if (!fitMap) {
                 return;
@@ -5720,7 +5947,7 @@
             renderCurrentTripStops();
             renderTripSummary(null);
             renderTripsList();
-            updateEmptyMapStatus();
+            updateMapOverlayState();
 
             if (!fitMap) {
                 return;
@@ -5769,7 +5996,7 @@
             setManualDrawControlsState();
             updateAutoRefreshStatus(getAutoRefreshPauseReason());
             updateTrackingSummaryBar();
-            updateEmptyMapStatus();
+            updateMapOverlayState();
         }
 
         function clearManualDrawLayer() {
@@ -6411,9 +6638,29 @@
             });
         }
 
+        if (filterStatsButton) {
+            filterStatsButton.addEventListener("click", () => {
+                setFilterStatsModalOpen(true);
+            });
+        }
+
+        if (filterStatsModal) {
+            filterStatsModal.addEventListener("click", (event) => {
+                if (event.target === filterStatsModal) {
+                    setFilterStatsModalOpen(false);
+                }
+            });
+        }
+
         if (periodModalCancelButton) {
             periodModalCancelButton.addEventListener("click", () => {
                 setPeriodModalOpen(false);
+            });
+        }
+
+        if (filterStatsModalCloseButton) {
+            filterStatsModalCloseButton.addEventListener("click", () => {
+                setFilterStatsModalOpen(false);
             });
         }
 
@@ -6996,6 +7243,11 @@
                 return;
             }
 
+            if (event.key === "Escape" && isFilterStatsModalOpen) {
+                setFilterStatsModalOpen(false);
+                return;
+            }
+
             if (event.key === "Escape" && isSidebarOpen) {
                 setSidebarOpen(false);
             }
@@ -7019,7 +7271,7 @@
             updateLiveTrackingControls();
             updateTrackingSummaryBar();
             updatePeriodTriggerLabel();
-            updateEmptyMapStatus();
+            updateMapOverlayState();
             startLivePositionsRefresh();
             loadAllTrips();
             loadLiveVehiclePositions({ showErrors: true });
