@@ -19,6 +19,7 @@ import com.rastreo.vehicular.data.PendingTripPointDraft
 import com.rastreo.vehicular.data.RastreoRepository
 import com.rastreo.vehicular.data.RefreshTransientException
 import com.rastreo.vehicular.data.SessionStore
+import com.rastreo.vehicular.data.TrackingConfigStore
 import com.rastreo.vehicular.data.TrackingStatus
 import com.rastreo.vehicular.data.TrackingStatusStore
 import com.rastreo.vehicular.data.TripPointRequest
@@ -28,8 +29,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -51,19 +54,23 @@ class TrackingForegroundService : Service() {
 
     private lateinit var sessionStore: SessionStore
     private lateinit var pendingSyncStore: PendingSyncStore
+    private lateinit var trackingConfigStore: TrackingConfigStore
     private lateinit var repository: RastreoRepository
     private lateinit var locationRepository: LocationRepository
     private lateinit var trackingStatusStore: TrackingStatusStore
 
     private var trackingJob: Job? = null
+    private var locationObservationJob: Job? = null
     private var activeTripId: Int? = null
     private var lastAcceptedPoint: AcceptedPoint? = null
+    private var latestObservedLocation: com.rastreo.vehicular.location.LocationSample? = null
     private var distanceMinimumDiscardCountSinceLastAccepted = 0
 
     override fun onCreate() {
         super.onCreate()
         sessionStore = SessionStore(applicationContext)
         pendingSyncStore = PendingSyncStore(applicationContext)
+        trackingConfigStore = TrackingConfigStore(applicationContext)
         repository = RastreoRepository(sessionStore)
         locationRepository = LocationRepository(applicationContext)
         trackingStatusStore = TrackingStatusStore(applicationContext)
@@ -151,6 +158,7 @@ class TrackingForegroundService : Service() {
             }
         }
         trackingJob?.cancel()
+        locationObservationJob?.cancel()
         serviceScope.coroutineContext[Job]?.cancel()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
@@ -178,11 +186,13 @@ class TrackingForegroundService : Service() {
 
         activeTripId = tripId
         lastAcceptedPoint = null
+        latestObservedLocation = null
         distanceMinimumDiscardCountSinceLastAccepted = 0
         trackingJob = serviceScope.launch {
             try {
                 Log.i(TAG, "Starting tracking loop for trip $tripId")
                 val startedAt = Instant.now().toString()
+                val config = trackingConfigStore.getState()
                 updateTrackingStatus { previous ->
                     if (isRecovery && previous.currentTripId == tripId) {
                         previous.copy(
@@ -203,7 +213,14 @@ class TrackingForegroundService : Service() {
                         )
                     }
                 }
-                trackingLoop(tripId)
+                startLocationObservation(
+                    tripId = tripId,
+                    observationIntervalMs = config.gpsObservationIntervalMs,
+                )
+                evaluationLoop(
+                    tripId = tripId,
+                    evaluationIntervalMs = config.evaluationIntervalMs,
+                )
             } catch (_: CancellationException) {
                 Log.i(TAG, "Tracking loop cancelled for trip $tripId")
             } catch (error: Throwable) {
@@ -217,6 +234,7 @@ class TrackingForegroundService : Service() {
                     )
                 }
             } finally {
+                stopLocationObservation()
                 if (activeTripId == tripId) {
                     activeTripId = null
                 }
@@ -233,6 +251,10 @@ class TrackingForegroundService : Service() {
         }
         trackingJob?.cancel()
         trackingJob = null
+        serviceScope.launch {
+            stopLocationObservation()
+        }
+        latestObservedLocation = null
         activeTripId = null
         lastAcceptedPoint = null
         distanceMinimumDiscardCountSinceLastAccepted = 0
@@ -275,7 +297,51 @@ class TrackingForegroundService : Service() {
         startTrackingLoop(resumableTripId, isRecovery = true)
     }
 
-    private suspend fun trackingLoop(tripId: Int) {
+    private suspend fun startLocationObservation(
+        tripId: Int,
+        observationIntervalMs: Long,
+    ) {
+        stopLocationObservation()
+        locationObservationJob = serviceScope.launch {
+            locationRepository.observeLocationUpdates(observationIntervalMs).collect { location ->
+                if (activeTripId != tripId) {
+                    return@collect
+                }
+                latestObservedLocation = location
+                val observationTimestamp = location.timestamp
+                updateTrackingStatus {
+                    it.copy(
+                        serviceRunning = true,
+                        trackingActive = true,
+                        currentTripId = tripId,
+                        lastReadAttemptAt = observationTimestamp,
+                        gpsReadStartedAt = observationTimestamp,
+                        gpsReadFinishedAt = observationTimestamp,
+                        gpsReadDurationMs = null,
+                        gpsReadCount = it.gpsReadCount + 1,
+                        lastLocationAt = observationTimestamp,
+                        lastLatitude = location.latitude,
+                        lastLongitude = location.longitude,
+                        lastAccuracy = location.accuracy,
+                        lastSpeed = location.speed,
+                        lastLocationProvider = location.provider ?: "No disponible",
+                        lastLocationAgeMs = location.ageMs,
+                        lastOperationalMessage = "Muestra GPS observada.",
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun stopLocationObservation() {
+        locationObservationJob?.cancelAndJoin()
+        locationObservationJob = null
+    }
+
+    private suspend fun evaluationLoop(
+        tripId: Int,
+        evaluationIntervalMs: Long,
+    ) {
         while (currentCoroutineContext().isActive && activeTripId == tripId) {
             val loopStartedAt = Instant.now().toString()
             val loopStartedAtMs = System.currentTimeMillis()
@@ -307,36 +373,15 @@ class TrackingForegroundService : Service() {
                 break
             }
 
-            val timestamp = Instant.now().toString()
-            val gpsReadStartedAtMs = System.currentTimeMillis()
             updateTrackingStatus {
                 it.copy(
                     serviceRunning = true,
                     trackingActive = true,
                     currentTripId = tripId,
-                    lastReadAttemptAt = timestamp,
-                    gpsReadStartedAt = timestamp,
-                    lastOperationalMessage = "Intentando obtener ubicacion.",
+                    lastOperationalMessage = "Evaluando ultima muestra GPS.",
                 )
             }
-            val location = locationRepository.getCurrentLocation()
-            val gpsReadFinishedAt = Instant.now().toString()
-            val gpsReadDurationMs = System.currentTimeMillis() - gpsReadStartedAtMs
-            val isSlowRead = gpsReadDurationMs > SLOW_GPS_READ_THRESHOLD_MS
-            val isVerySlowRead = gpsReadDurationMs > VERY_SLOW_GPS_READ_THRESHOLD_MS
-            updateTrackingStatus {
-                it.copy(
-                    serviceRunning = true,
-                    trackingActive = true,
-                    currentTripId = tripId,
-                    gpsReadFinishedAt = gpsReadFinishedAt,
-                    gpsReadDurationMs = gpsReadDurationMs,
-                    gpsReadCount = it.gpsReadCount + 1,
-                    gpsNullCount = it.gpsNullCount + if (location == null) 1 else 0,
-                    gpsSlowReadCount = it.gpsSlowReadCount + if (isSlowRead) 1 else 0,
-                    gpsVerySlowReadCount = it.gpsVerySlowReadCount + if (isVerySlowRead) 1 else 0,
-                )
-            }
+            val location = latestObservedLocation
             if (location == null) {
                 val loopFinishedAt = Instant.now().toString()
                 val loopDurationMs = System.currentTimeMillis() - loopStartedAtMs
@@ -347,14 +392,15 @@ class TrackingForegroundService : Service() {
                         currentTripId = tripId,
                         loopFinishedAt = loopFinishedAt,
                         loopDurationMs = loopDurationMs,
-                        lastOperationalMessage = "Ubicacion no disponible.",
+                        gpsNullCount = it.gpsNullCount + 1,
+                        lastOperationalMessage = "Sin muestra GPS disponible para evaluar.",
                     )
                 }
-                delay(BuildConfig.TRACKING_INTERVAL_MS)
+                delay(evaluationIntervalMs)
                 continue
             }
 
-            val currentInstant = Instant.parse(timestamp)
+            val currentInstant = runCatching { Instant.parse(location.timestamp) }.getOrElse { Instant.now() }
             val validation = validateLocationPoint(
                 tripId = tripId,
                 location = location,
@@ -365,13 +411,6 @@ class TrackingForegroundService : Service() {
                     serviceRunning = true,
                     trackingActive = true,
                     currentTripId = tripId,
-                    lastLocationAt = gpsReadFinishedAt,
-                    lastLatitude = location.latitude,
-                    lastLongitude = location.longitude,
-                    lastAccuracy = location.accuracy,
-                    lastSpeed = location.speed,
-                    lastLocationProvider = location.provider ?: "No disponible",
-                    lastLocationAgeMs = location.ageMs,
                     lastFilterElapsedSeconds = validation.elapsedSeconds,
                     lastFilterRequiredDistanceMeters = validation.requiredDistanceMeters,
                     lastFilterActualDistanceMeters = validation.actualDistanceMeters,
@@ -406,21 +445,21 @@ class TrackingForegroundService : Service() {
                         loopDurationMs = loopDurationMs,
                         lastGpsDiscardReason = discardReason,
                         rejectedPositionsCount = it.rejectedPositionsCount + 1,
-                        lastRejectedAt = timestamp,
+                        lastRejectedAt = location.timestamp,
                         secondsSinceLastAcceptedPoint = validation.elapsedSeconds,
                         distanceMinimumDiscardCountSinceLastAccepted =
                             distanceMinimumDiscardCountSinceLastAccepted,
                         lastOperationalMessage = discardReason,
                     )
                 }
-                delay(BuildConfig.TRACKING_INTERVAL_MS)
+                delay(evaluationIntervalMs)
                 continue
             }
 
             val request = TripPointRequest(
                 latitude = location.latitude,
                 longitude = location.longitude,
-                timestamp = timestamp,
+                timestamp = location.timestamp,
                 accuracy = location.accuracy,
                 speed = location.speed,
             )
@@ -428,7 +467,7 @@ class TrackingForegroundService : Service() {
                 tripId = tripId,
                 latitude = location.latitude,
                 longitude = location.longitude,
-                timestamp = timestamp,
+                timestamp = location.timestamp,
                 accuracy = location.accuracy,
                 speed = location.speed,
                 sendType = if (shouldSendPermanencePoint) "permanencia" else "normal",
@@ -610,9 +649,11 @@ class TrackingForegroundService : Service() {
                     currentTripId = tripId,
                     loopFinishedAt = loopFinishedAt,
                     loopDurationMs = loopDurationMs,
+                    gpsSlowReadCount = it.gpsSlowReadCount + if (loopDurationMs > SLOW_GPS_READ_THRESHOLD_MS) 1 else 0,
+                    gpsVerySlowReadCount = it.gpsVerySlowReadCount + if (loopDurationMs > VERY_SLOW_GPS_READ_THRESHOLD_MS) 1 else 0,
                 )
             }
-            delay(BuildConfig.TRACKING_INTERVAL_MS)
+            delay(evaluationIntervalMs)
         }
     }
 
