@@ -7,6 +7,7 @@ from app.config import (
     INITIAL_ADMIN_PASSWORD,
     INITIAL_ADMIN_USERNAME,
 )
+from app.models.company import Company
 from app.models.user import User
 from app.utils.security import hash_password
 
@@ -25,11 +26,14 @@ def ensure_initial_admin(db: Session) -> None:
     if existing_user is not None:
         return
 
+    default_company = db.query(Company).filter(Company.slug == "default").first()
+
     admin = User(
         username=INITIAL_ADMIN_USERNAME,
         password_hash=hash_password(INITIAL_ADMIN_PASSWORD),
         full_name=INITIAL_ADMIN_FULL_NAME,
         email=INITIAL_ADMIN_EMAIL,
+        company_id=default_company.id if default_company is not None else None,
         role="admin",
         is_active=True,
     )

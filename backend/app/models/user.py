@@ -13,6 +13,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
     email = Column(String, nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
     role = Column(String, nullable=False, default="user", server_default="user")
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
