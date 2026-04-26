@@ -1,4 +1,6 @@
 from app.models.company import Company
+from app.models.gps_device import GpsDevice
+from app.models.gps_point_raw import GpsPointRaw
 from app.models.plan import Plan
 from app.models.refresh_token import RefreshToken
 from app.models.trip import Trip
@@ -9,6 +11,8 @@ from app.models.vehicle import Vehicle
 
 __all__ = [
     "Company",
+    "GpsDevice",
+    "GpsPointRaw",
     "Plan",
     "RefreshToken",
     "Trip",

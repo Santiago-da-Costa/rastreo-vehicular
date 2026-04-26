@@ -8,8 +8,8 @@ from sqlalchemy import inspect, text
 
 from app.config import CORS_ORIGINS
 from app.database import Base, SessionLocal, engine
-from app.models import company, plan, refresh_token, trip, trip_point, trip_stop, user, vehicle
-from app.routes import auth, companies, trip_points, trips, users, vehicles
+from app.models import company, gps_device, gps_point_raw, plan, refresh_token, trip, trip_point, trip_stop, user, vehicle
+from app.routes import auth, companies, gps_ingest, trip_points, trips, users, vehicles
 from app.services.bootstrap import ensure_initial_admin
 
 logger = logging.getLogger(__name__)
@@ -274,6 +274,7 @@ app.include_router(vehicles.router)
 app.include_router(auth.router)
 app.include_router(companies.router)
 app.include_router(users.router)
+app.include_router(gps_ingest.router)
 
 
 @app.get("/")
