@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Empresa - Rastreo Vehicular</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Registro de Empresa</h1>
+        <nav>
+            <a href="index.html">Inicio</a>
+            <a href="login.html">Iniciar sesión</a>
+        </nav>
+    </header>
+
+    <main>
+        <form id="register-company-form">
+            <label for="company-name">Nombre de empresa</label>
+            <input id="company-name" name="company-name" type="text" autocomplete="organization" required>
+
+            <label for="owner-full-name">Nombre completo del titular</label>
+            <input id="owner-full-name" name="owner-full-name" type="text" autocomplete="name" required>
+
+            <label for="owner-username">Usuario</label>
+            <input id="owner-username" name="owner-username" type="text" autocomplete="username" required>
+
+            <label for="owner-email">Email</label>
+            <input id="owner-email" name="owner-email" type="email" autocomplete="email" required>
+
+            <label for="owner-password">Contraseña</label>
+            <input id="owner-password" name="owner-password" type="password" autocomplete="new-password" required>
+
+            <button id="register-company-button" type="submit">Crear empresa</button>
+            <p class="message" id="register-company-message" aria-live="polite"></p>
+            <p><a href="login.html">Ir a iniciar sesión</a></p>
+        </form>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script>
+        const registerCompanyForm = document.getElementById("register-company-form");
+        const companyNameInput = document.getElementById("company-name");
+        const ownerFullNameInput = document.getElementById("owner-full-name");
+        const ownerUsernameInput = document.getElementById("owner-username");
+        const ownerEmailInput = document.getElementById("owner-email");
+        const ownerPasswordInput = document.getElementById("owner-password");
+        const registerCompanyButton = document.getElementById("register-company-button");
+        const registerCompanyMessage = document.getElementById("register-company-message");
+
+        function setRegisterCompanyMessage(text, isError = false) {
+            registerCompanyMessage.textContent = text;
+            registerCompanyMessage.classList.toggle("error", isError);
+        }
+
+        registerCompanyForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const companyName = companyNameInput.value.trim();
+            const ownerFullName = ownerFullNameInput.value.trim();
+            const ownerUsername = ownerUsernameInput.value.trim();
+            const ownerEmail = ownerEmailInput.value.trim();
+            const ownerPassword = ownerPasswordInput.value;
+
+            if (!companyName || !ownerFullName || !ownerUsername || !ownerEmail || !ownerPassword) {
+                setRegisterCompanyMessage("Complete todos los campos requeridos.", true);
+                return;
+            }
+
+            registerCompanyButton.disabled = true;
+            setRegisterCompanyMessage("Creando empresa...");
+
+            try {
+                const response = await fetch(`${window.RastreoConfig.apiBaseUrl}/companies/register`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        company_name: companyName,
+                        owner_username: ownerUsername,
+                        owner_password: ownerPassword,
+                        owner_full_name: ownerFullName,
+                        owner_email: ownerEmail
+                    })
+                });
+
+                if (response.ok) {
+                    setRegisterCompanyMessage("Empresa creada correctamente. Ya puede iniciar sesión.");
+                    registerCompanyForm.reset();
+                    window.setTimeout(() => {
+                        window.location.href = "login.html";
+                    }, 2500);
+                    return;
+                }
+
+                if (response.status === 409) {
+                    setRegisterCompanyMessage("El usuario o la empresa ya existe.", true);
+                    return;
+                }
+
+                setRegisterCompanyMessage("No fue posible crear la empresa. Intente nuevamente.", true);
+            } catch (error) {
+                setRegisterCompanyMessage("No fue posible crear la empresa. Verifique la conexión e intente nuevamente.", true);
+            } finally {
+                registerCompanyButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
