@@ -58,12 +58,18 @@ data class LocalTrip(
     val syncState: String,
 )
 
+sealed class ActiveTrackingRef {
+    data class Remote(val tripId: Int, val localTripId: String?) : ActiveTrackingRef()
+    data class Local(val localTripId: String) : ActiveTrackingRef()
+}
+
 data class PendingSyncState(
     val pendingPoints: List<PendingTripPoint> = emptyList(),
     val pendingClose: PendingTripClose? = null,
     val activeTripId: Int? = null,
     val localTrips: List<LocalTrip> = emptyList(),
     val activeLocalTripId: String? = null,
+    val activeTrackingRef: ActiveTrackingRef? = null,
 )
 
 private data class StoredPendingSyncState(
@@ -316,7 +322,27 @@ class PendingSyncStore(private val context: Context) {
             activeTripId = normalizedState.activeTripId,
             localTrips = normalizedState.localTrips.sortedLocalTrips(),
             activeLocalTripId = normalizedState.activeLocalTripId,
+            activeTrackingRef = normalizedState.toActiveTrackingRef(),
         )
+    }
+
+    private fun StoredPendingSyncState.toActiveTrackingRef(): ActiveTrackingRef? {
+        activeTripId?.let { tripId ->
+            return ActiveTrackingRef.Remote(
+                tripId = tripId,
+                localTripId = activeLocalTripId,
+            )
+        }
+
+        val activeLocalTrip = activeLocalTripId?.let { localTripId ->
+            localTrips.orEmpty().firstOrNull {
+                it.localTripId == localTripId &&
+                    it.status == LOCAL_TRIP_STATUS_ACTIVE &&
+                    it.remoteTripId == null
+            }
+        }
+
+        return activeLocalTrip?.let { ActiveTrackingRef.Local(it.localTripId) }
     }
 
     private fun StoredPendingSyncState.normalized(): StoredPendingSyncState {

@@ -5,6 +5,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.rastreo.vehicular.data.ActiveTrackingRef
 import com.rastreo.vehicular.data.LocalTrip
 import com.rastreo.vehicular.data.PendingSyncState
 import com.rastreo.vehicular.data.PendingSyncStore
@@ -826,7 +827,7 @@ class AppViewModel(
     }
 
     fun stopTracking() {
-        val tripId = uiState.value.currentTripId ?: run {
+        val fallbackTripId = uiState.value.currentTripId ?: run {
             val message = "No hay trip activo."
             _uiState.update {
                 it.copy(
@@ -837,8 +838,29 @@ class AppViewModel(
             }
             return
         }
-        stopTrackingService(appContext)
         viewModelScope.launch {
+            val activeTrackingRef = pendingSyncStore.getState().activeTrackingRef
+                ?: ActiveTrackingRef.Remote(
+                    tripId = fallbackTripId,
+                    localTripId = pendingSyncStore.getActiveLocalTrip()?.localTripId,
+                )
+
+            if (activeTrackingRef is ActiveTrackingRef.Local) {
+                val message = "Tracking local pendiente de implementacion."
+                _uiState.update {
+                    it.copy(
+                        isBusy = false,
+                        isTracking = false,
+                        statusMessage = message,
+                        operationMessage = "Tracking local sin cierre remoto.",
+                        lastErrorMessage = message,
+                    )
+                }
+                return@launch
+            }
+
+            val tripId = (activeTrackingRef as ActiveTrackingRef.Remote).tripId
+            stopTrackingService(appContext)
             _uiState.update {
                 it.copy(
                     isBusy = true,
