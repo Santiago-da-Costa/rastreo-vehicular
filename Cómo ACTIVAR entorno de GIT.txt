@@ -25,8 +25,10 @@ cd C:\Users\Asus\Desktop\Jorge\V3\backend\rastreo_vehicular\frontend
 >> python -m http.server 5500
 
 Nueva forma de levantar la terminal:
+Cambiamos puerto de 8000 a 8001
+Se inicia solo backend ahora.
 
- uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
 
 
@@ -115,10 +117,16 @@ Para el panel principal: http://10.145.37.128:5500/trip_map.html
 Para captura (lo que te interesa ahora): http://10.145.37.128:5500/live_tracking.html
 
 
+Activar túnel TCP de NGROK para GPS COBAN:
+Hay túneles TCP y HTTP.
+En cualquier terminal:
 
+1- ngrok config add-authtoken TU_TOKEN
 
+2- ngrok tcp 5000
 
-
+Número de antel para Coban
+099876589
 
 
 

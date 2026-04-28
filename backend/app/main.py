@@ -21,6 +21,7 @@ def ensure_runtime_schema():
     inspector = inspect(engine)
     dialect = engine.dialect.name
     trip_columns = {column["name"] for column in inspector.get_columns("trips")}
+    trip_point_columns = {column["name"] for column in inspector.get_columns("trip_points")}
     user_columns = {column["name"] for column in inspector.get_columns("users")}
     vehicle_columns = {column["name"] for column in inspector.get_columns("vehicles")}
 
@@ -48,17 +49,26 @@ def ensure_runtime_schema():
         alter_statements.append(
             "ALTER TABLE trips ADD COLUMN company_id INTEGER REFERENCES companies(id)"
         )
+    if "client_point_id" not in trip_point_columns:
+        alter_statements.append(
+            "ALTER TABLE trip_points ADD COLUMN client_point_id VARCHAR"
+        )
     if company_columns and "owner_user_id" not in company_columns:
         alter_statements.append(
             "ALTER TABLE companies ADD COLUMN owner_user_id INTEGER REFERENCES users(id)"
         )
 
-    if not alter_statements:
-        return
-
     with engine.begin() as connection:
         for statement in alter_statements:
             connection.execute(text(statement))
+        connection.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_trip_points_trip_client_point_id
+                ON trip_points (trip_id, client_point_id)
+                """
+            )
+        )
 
 
 def ensure_default_company_data():
@@ -256,7 +266,8 @@ def bootstrap_initial_admin():
 
 bootstrap_initial_admin()
 
-FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+FRONTEND_DIR = BASE_DIR / "frontend"
 
 app = FastAPI(title="Sistema de Rastreo Vehicular")
 
@@ -282,4 +293,4 @@ def root():
     return {"message": "Backend funcionando correctamente"}
 
 
-app.mount("/", StaticFiles(directory=FRONTEND_DIR), name="frontend")
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")

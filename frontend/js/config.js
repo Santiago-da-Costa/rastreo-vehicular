@@ -1,6 +1,6 @@
 (function () {
     const apiBaseUrls = {
-        local: "http://localhost:8000",
+        local: `${window.location.protocol}//${window.location.host}`,
         render: "https://rastreo-vehicular.onrender.com"
     };
 

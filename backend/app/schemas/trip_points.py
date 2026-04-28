@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class TripPointCreate(BaseModel):
+    client_point_id: str | None = None
     latitude: float
     longitude: float
     timestamp: datetime

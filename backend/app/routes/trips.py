@@ -380,6 +380,9 @@ def stop_trip(
     require_edit_trips(current_user)
     trip = get_accessible_trip_or_404(db, current_user, trip_id)
 
+    if trip.status == "finished" or trip.end_time is not None:
+        return trip
+
     stop_time = datetime.now()
     close_open_vehicle_trips(db, trip.vehicle_id, stop_time, exclude_trip_id=trip.id)
 

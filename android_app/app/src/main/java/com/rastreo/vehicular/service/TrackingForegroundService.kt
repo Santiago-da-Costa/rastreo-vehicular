@@ -42,6 +42,7 @@ import retrofit2.HttpException
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -456,7 +457,9 @@ class TrackingForegroundService : Service() {
                 continue
             }
 
+            val clientPointId = UUID.randomUUID().toString()
             val request = TripPointRequest(
+                clientPointId = clientPointId,
                 latitude = location.latitude,
                 longitude = location.longitude,
                 timestamp = location.timestamp,
@@ -465,6 +468,7 @@ class TrackingForegroundService : Service() {
             )
             val pendingPointDraft = PendingTripPointDraft(
                 tripId = tripId,
+                clientPointId = clientPointId,
                 latitude = location.latitude,
                 longitude = location.longitude,
                 timestamp = location.timestamp,
@@ -774,6 +778,7 @@ class TrackingForegroundService : Service() {
                     token = token,
                     tripId = tripId,
                     request = TripPointRequest(
+                        clientPointId = point.clientPointId,
                         latitude = point.latitude,
                         longitude = point.longitude,
                         timestamp = point.timestamp,

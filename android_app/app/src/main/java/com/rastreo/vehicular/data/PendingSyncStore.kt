@@ -17,6 +17,7 @@ private val Context.pendingSyncDataStore by preferencesDataStore(name = "pending
 
 data class PendingTripPointDraft(
     val tripId: Int,
+    val clientPointId: String? = null,
     val latitude: Double,
     val longitude: Double,
     val timestamp: String,
@@ -28,6 +29,7 @@ data class PendingTripPointDraft(
 data class PendingTripPoint(
     val sequence: Long,
     val tripId: Int,
+    val clientPointId: String? = null,
     val latitude: Double,
     val longitude: Double,
     val timestamp: String,
@@ -88,6 +90,7 @@ class PendingSyncStore(private val context: Context) {
             val nextPoint = PendingTripPoint(
                 sequence = state.nextSequence,
                 tripId = point.tripId,
+                clientPointId = point.clientPointId,
                 latitude = point.latitude,
                 longitude = point.longitude,
                 timestamp = point.timestamp,

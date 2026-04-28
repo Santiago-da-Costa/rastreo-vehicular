@@ -63,6 +63,8 @@ data class TripResponse(
 )
 
 data class TripPointRequest(
+    @SerializedName("client_point_id")
+    val clientPointId: String? = null,
     val latitude: Double,
     val longitude: Double,
     val timestamp: String,
@@ -74,6 +76,8 @@ data class TripPointResponse(
     val id: Int,
     @SerializedName("trip_id")
     val tripId: Int,
+    @SerializedName("client_point_id")
+    val clientPointId: String? = null,
     val latitude: Double,
     val longitude: Double,
     val timestamp: String,

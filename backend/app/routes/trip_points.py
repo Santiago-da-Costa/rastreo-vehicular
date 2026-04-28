@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -25,13 +26,40 @@ def create_trip_point(
     require_edit_trips(current_user)
     trip = get_accessible_trip_or_404(db, current_user, trip_id)
 
-    point = TripPoint(trip_id=trip_id, **point_data.model_dump())
-    db.add(point)
-    db.flush()
-    update_trip_stops_for_new_point(db, trip, point)
-    db.commit()
-    db.refresh(point)
-    return point
+    if point_data.client_point_id:
+        existing_point = (
+            db.query(TripPoint)
+            .filter(
+                TripPoint.trip_id == trip_id,
+                TripPoint.client_point_id == point_data.client_point_id,
+            )
+            .first()
+        )
+        if existing_point:
+            return existing_point
+
+    try:
+        point = TripPoint(trip_id=trip_id, **point_data.model_dump())
+        db.add(point)
+        db.flush()
+        update_trip_stops_for_new_point(db, trip, point)
+        db.commit()
+        db.refresh(point)
+        return point
+    except IntegrityError:
+        db.rollback()
+        if point_data.client_point_id:
+            existing_point = (
+                db.query(TripPoint)
+                .filter(
+                    TripPoint.trip_id == trip_id,
+                    TripPoint.client_point_id == point_data.client_point_id,
+                )
+                .first()
+            )
+            if existing_point:
+                return existing_point
+        raise
 
 
 @router.get("", response_model=list[TripPointResponse])

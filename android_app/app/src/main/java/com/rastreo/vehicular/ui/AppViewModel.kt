@@ -833,79 +833,22 @@ class AppViewModel(
             }
 
             val token = sessionStore.sessionData.first().token
-            val hasPendingCloseForTrip = pendingSyncStore.getState().pendingClose?.tripId == tripId
-            if (pendingSyncStore.hasPendingPointsForTrip(tripId) || hasPendingCloseForTrip) {
-                savePendingClose(tripId)
-                ensurePendingCloseRetry()
-                when (runPendingCloseSyncAttempt(token, uiState.value.baseUrl)) {
-                    SyncResult.SUCCESS -> {
-                        _uiState.update { state ->
-                            state.copy(isBusy = false)
-                        }
-                    }
-
-                    SyncResult.UNAUTHORIZED -> {
-                        markSessionExpired(
-                            statusMessage = "Sesion expirada. El cierre del recorrido quedo pendiente.",
-                            operationMessage = "Cierre pendiente por sesion expirada.",
-                            preserveTripId = tripId,
-                            pendingTripClose = true,
-                            clearUserContext = false,
+            savePendingClose(tripId)
+            ensurePendingCloseRetry()
+            when (runPendingCloseSyncAttempt(token, uiState.value.baseUrl)) {
+                SyncResult.SUCCESS -> {
+                    _uiState.update { state ->
+                        state.copy(
+                            isBusy = false,
+                            isTracking = false,
+                            isSessionInvalid = false,
+                            statusMessage = "Trip $tripId detenido.",
+                            operationMessage = "Tracking detenido.",
                         )
                     }
-
-                    SyncResult.RETRY_LATER -> {
-                        refreshPendingSyncUi(forceTripId = tripId)
-                        val pointsStillPending = pendingSyncStore.hasPendingPointsForTrip(tripId)
-                        val message = if (pointsStillPending) {
-                            "Cierre pendiente: no se pudieron sincronizar los puntos."
-                        } else {
-                            "Cierre pendiente por problema de conexion."
-                        }
-                        _uiState.update {
-                            it.copy(
-                                isBusy = false,
-                                currentTripId = tripId,
-                                statusMessage = message,
-                                operationMessage = if (pointsStillPending) {
-                                    "Cierre pendiente por puntos pendientes."
-                                } else {
-                                    "Cierre pendiente por conexion."
-                                },
-                                lastErrorMessage = message,
-                            )
-                        }
-                    }
                 }
-                return@launch
-            }
 
-            val stopTripResult = runCatching {
-                repository.stopTrip(uiState.value.baseUrl, token, tripId)
-            }
-
-            if (stopTripResult.isSuccess) {
-                lastAcceptedPoint = null
-                distanceMinimumDiscardCountSinceLastAccepted = 0
-                pendingSyncStore.clearPendingClose(tripId)
-                pendingSyncStore.setActiveTripId(null)
-                refreshPendingSyncUi(preserveCurrentTripId = false)
-                _uiState.update {
-                    it.copy(
-                        isBusy = false,
-                        currentTripId = null,
-                        isTracking = false,
-                        pendingTripClose = false,
-                        isSessionInvalid = false,
-                        statusMessage = "Trip $tripId detenido.",
-                        operationMessage = "Tracking detenido.",
-                    )
-                }
-            } else {
-                val error = stopTripResult.exceptionOrNull()
-                savePendingClose(tripId)
-                ensurePendingCloseRetry()
-                if (isUnauthorizedError(error)) {
+                SyncResult.UNAUTHORIZED -> {
                     markSessionExpired(
                         statusMessage = "Sesion expirada. El cierre del recorrido quedo pendiente.",
                         operationMessage = "Cierre pendiente por sesion expirada.",
@@ -913,20 +856,27 @@ class AppViewModel(
                         pendingTripClose = true,
                         clearUserContext = false,
                     )
-                } else {
+                }
+
+                SyncResult.RETRY_LATER -> {
                     refreshPendingSyncUi(forceTripId = tripId)
-                    val message = if (isNetworkError(error)) {
-                        "No se pudo cerrar el recorrido por problema de conexion. El cierre quedo pendiente."
+                    val pointsStillPending = pendingSyncStore.hasPendingPointsForTrip(tripId)
+                    val message = if (pointsStillPending) {
+                        "Cierre pendiente: no se pudieron sincronizar los puntos."
                     } else {
-                        error?.message ?: "No se pudo cerrar el trip en backend."
+                        "Cierre pendiente por problema de conexion."
                     }
-                    _uiState.update { state ->
-                        state.copy(
+                    _uiState.update {
+                        it.copy(
                             isBusy = false,
                             currentTripId = tripId,
                             pendingTripClose = true,
                             statusMessage = message,
-                            operationMessage = "Fallo deteniendo tracking.",
+                            operationMessage = if (pointsStillPending) {
+                                "Cierre pendiente por puntos pendientes."
+                            } else {
+                                "Cierre pendiente por conexion."
+                            },
                             lastErrorMessage = message,
                         )
                     }
@@ -1136,6 +1086,7 @@ class AppViewModel(
                     token = token,
                     tripId = tripId,
                     request = TripPointRequest(
+                        clientPointId = point.clientPointId,
                         latitude = point.latitude,
                         longitude = point.longitude,
                         timestamp = point.timestamp,
