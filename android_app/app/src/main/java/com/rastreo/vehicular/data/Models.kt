@@ -46,6 +46,8 @@ data class TripStartRequest(
     @SerializedName("vehicle_id")
     val vehicleId: Int,
     val categoria: String,
+    @SerializedName("client_trip_id")
+    val clientTripId: String? = null,
 )
 
 data class TripResponse(

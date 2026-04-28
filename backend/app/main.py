@@ -49,6 +49,10 @@ def ensure_runtime_schema():
         alter_statements.append(
             "ALTER TABLE trips ADD COLUMN company_id INTEGER REFERENCES companies(id)"
         )
+    if "client_trip_id" not in trip_columns:
+        alter_statements.append(
+            "ALTER TABLE trips ADD COLUMN client_trip_id VARCHAR"
+        )
     if "client_point_id" not in trip_point_columns:
         alter_statements.append(
             "ALTER TABLE trip_points ADD COLUMN client_point_id VARCHAR"
@@ -69,6 +73,25 @@ def ensure_runtime_schema():
                 """
             )
         )
+        if dialect == "postgresql":
+            connection.execute(
+                text(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_trips_company_client_trip_id
+                    ON trips (company_id, client_trip_id)
+                    WHERE client_trip_id IS NOT NULL
+                    """
+                )
+            )
+        else:
+            connection.execute(
+                text(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_trips_company_client_trip_id
+                    ON trips (company_id, client_trip_id)
+                    """
+                )
+            )
 
 
 def ensure_default_company_data():

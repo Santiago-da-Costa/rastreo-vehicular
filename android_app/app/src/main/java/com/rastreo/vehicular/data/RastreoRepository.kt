@@ -64,9 +64,10 @@ class RastreoRepository(
         token: String,
         vehicleId: Int,
         categoria: String,
+        clientTripId: String? = null,
     ): TripResponse {
         return executeAuthenticated(baseUrl, token) { api ->
-            api.startTrip(TripStartRequest(vehicleId, categoria))
+            api.startTrip(TripStartRequest(vehicleId, categoria, clientTripId))
         }
     }
 

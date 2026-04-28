@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -354,21 +355,50 @@ def start_trip(
     require_vehicle_access_or_404(db, current_user, trip_data.vehicle_id)
     _ensure_vehicle_matches_user_company(vehicle, current_user)
 
+    client_trip_id = trip_data.client_trip_id.strip() if trip_data.client_trip_id else None
+    if client_trip_id:
+        existing_trip = (
+            db.query(Trip)
+            .filter(
+                Trip.company_id == vehicle.company_id,
+                Trip.client_trip_id == client_trip_id,
+            )
+            .first()
+        )
+        if existing_trip is not None:
+            return existing_trip
+
     start_time = datetime.now()
     close_open_vehicle_trips(db, trip_data.vehicle_id, start_time)
 
-    trip = Trip(
-        vehicle_id=trip_data.vehicle_id,
-        company_id=vehicle.company_id,
-        categoria=trip_data.categoria,
-        start_time=start_time,
-        status="active",
-        is_manual=False,
-    )
-    db.add(trip)
-    db.commit()
-    db.refresh(trip)
-    return trip
+    try:
+        trip = Trip(
+            vehicle_id=trip_data.vehicle_id,
+            company_id=vehicle.company_id,
+            client_trip_id=client_trip_id,
+            categoria=trip_data.categoria,
+            start_time=start_time,
+            status="active",
+            is_manual=False,
+        )
+        db.add(trip)
+        db.commit()
+        db.refresh(trip)
+        return trip
+    except IntegrityError:
+        db.rollback()
+        if client_trip_id:
+            existing_trip = (
+                db.query(Trip)
+                .filter(
+                    Trip.company_id == vehicle.company_id,
+                    Trip.client_trip_id == client_trip_id,
+                )
+                .first()
+            )
+            if existing_trip is not None:
+                return existing_trip
+        raise
 
 
 @router.post("/{trip_id}/stop", response_model=TripStopResponse)

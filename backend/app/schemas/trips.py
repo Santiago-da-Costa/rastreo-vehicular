@@ -8,6 +8,7 @@ from app.schemas.trip_points import TripPointResponse
 class TripStart(BaseModel):
     vehicle_id: int
     categoria: str
+    client_trip_id: str | None = None
 
 
 class TripCategoryUpdate(BaseModel):
@@ -32,6 +33,7 @@ class TripManualCreate(BaseModel):
 class TripResponse(BaseModel):
     id: int
     vehicle_id: int
+    client_trip_id: str | None = None
     categoria: str
     start_time: datetime
     end_time: datetime | None = None
