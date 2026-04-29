@@ -17,7 +17,7 @@ import java.time.Instant
 private val Context.pendingSyncDataStore by preferencesDataStore(name = "pending_sync")
 
 data class PendingTripPointDraft(
-    val tripId: Int,
+    val tripId: Int?,
     val localTripId: String? = null,
     val clientPointId: String? = null,
     val latitude: Double,
@@ -30,7 +30,7 @@ data class PendingTripPointDraft(
 
 data class PendingTripPoint(
     val sequence: Long,
-    val tripId: Int,
+    val tripId: Int?,
     val localTripId: String? = null,
     val clientPointId: String? = null,
     val latitude: Double,

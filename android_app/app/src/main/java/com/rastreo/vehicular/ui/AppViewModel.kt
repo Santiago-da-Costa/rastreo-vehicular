@@ -232,9 +232,14 @@ class AppViewModel(
         }
 
         val pendingSyncState = pendingSyncStore.getState()
-        val activeTripId = pendingSyncState.activeTripId ?: return
+        val activeTrackingRef = pendingSyncState.activeTrackingRef ?: return
         if (pendingSyncState.pendingClose != null) {
             return
+        }
+        val activeTripId = (activeTrackingRef as? ActiveTrackingRef.Remote)?.tripId
+        val activeLocalTripId = when (activeTrackingRef) {
+            is ActiveTrackingRef.Remote -> activeTrackingRef.localTripId
+            is ActiveTrackingRef.Local -> activeTrackingRef.localTripId
         }
 
         ContextCompat.startForegroundService(
@@ -242,7 +247,7 @@ class AppViewModel(
             TrackingForegroundService.createStartIntent(
                 context = context,
                 tripId = activeTripId,
-                localTripId = pendingSyncState.activeLocalTripId,
+                localTripId = activeLocalTripId,
                 isRecovery = true,
             ),
         )
@@ -646,7 +651,7 @@ class AppViewModel(
 
     fun startTrackingService(
         context: Context,
-        tripId: Int,
+        tripId: Int?,
         vehicleId: Int,
         category: String,
         localTripId: String? = null,
@@ -836,6 +841,13 @@ class AppViewModel(
                         clearUserContext = true,
                     )
                 } else if (isRemoteStartTransientError(error)) {
+                    startTrackingService(
+                        context = appContext,
+                        tripId = null,
+                        vehicleId = vehicleId,
+                        category = category,
+                        localTripId = localTripId,
+                    )
                     _uiState.update { current ->
                         current.copy(
                             isBusy = false,
@@ -911,6 +923,7 @@ class AppViewModel(
                 }
 
             if (activeTrackingRef is ActiveTrackingRef.Local) {
+                stopTrackingService(appContext)
                 val closedLocalTrip = pendingSyncStore.markLocalTripClosedLocally(
                     localTripId = activeTrackingRef.localTripId,
                 )

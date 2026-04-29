@@ -66,6 +66,7 @@ class TrackingForegroundService : Service() {
     private var trackingJob: Job? = null
     private var locationObservationJob: Job? = null
     private var activeTripId: Int? = null
+    private var activeLocalOnlyTripId: String? = null
     private var lastAcceptedPoint: AcceptedPoint? = null
     private var latestObservedLocation: com.rastreo.vehicular.location.LocationSample? = null
     private var distanceMinimumDiscardCountSinceLastAccepted = 0
@@ -91,11 +92,15 @@ class TrackingForegroundService : Service() {
         startForegroundWithNotification()
         when (intent?.action) {
             ACTION_START_TRACKING -> {
-                val tripId = intent.getIntExtra(EXTRA_TRIP_ID, INVALID_TRIP_ID)
+                val tripId = if (intent.hasExtra(EXTRA_TRIP_ID)) {
+                    intent.getIntExtra(EXTRA_TRIP_ID, INVALID_TRIP_ID)
+                } else {
+                    null
+                }
                 val isRecovery = intent.getBooleanExtra(EXTRA_IS_RECOVERY, false)
                 val category = intent.getStringExtra(EXTRA_CATEGORY)?.trim().orEmpty()
                 val localTripId = intent.getStringExtra(EXTRA_LOCAL_TRIP_ID)
-                if (tripId == INVALID_TRIP_ID) {
+                if (tripId == INVALID_TRIP_ID || (tripId == null && localTripId.isNullOrBlank())) {
                     Log.w(TAG, "Ignoring start without valid trip id")
                     updateTrackingStatusAsync {
                         it.copy(
@@ -177,7 +182,7 @@ class TrackingForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startTrackingLoop(
-        tripId: Int,
+        tripId: Int?,
         isRecovery: Boolean = false,
         requestedCategory: String = "",
         localTripId: String? = null,
@@ -196,6 +201,7 @@ class TrackingForegroundService : Service() {
         }
 
         activeTripId = tripId
+        activeLocalOnlyTripId = localTripId.takeIf { tripId == null }
         lastAcceptedPoint = null
         latestObservedLocation = null
         distanceMinimumDiscardCountSinceLastAccepted = 0
@@ -226,6 +232,7 @@ class TrackingForegroundService : Service() {
                 }
                 startLocationObservation(
                     tripId = tripId,
+                    localTripId = localTripId,
                     observationIntervalMs = config.gpsObservationIntervalMs,
                 )
                 evaluationLoop(
@@ -250,6 +257,9 @@ class TrackingForegroundService : Service() {
                 if (activeTripId == tripId) {
                     activeTripId = null
                 }
+                if (activeLocalOnlyTripId == localTripId) {
+                    activeLocalOnlyTripId = null
+                }
                 trackingJob = null
             }
         }
@@ -268,6 +278,7 @@ class TrackingForegroundService : Service() {
         }
         latestObservedLocation = null
         activeTripId = null
+        activeLocalOnlyTripId = null
         lastAcceptedPoint = null
         distanceMinimumDiscardCountSinceLastAccepted = 0
         updateTrackingStatusAsync {
@@ -288,10 +299,10 @@ class TrackingForegroundService : Service() {
         }
 
         val pendingSyncState = pendingSyncStore.getState()
-        val resumableTripId = pendingSyncState.activeTripId
+        val activeTrackingRef = pendingSyncState.activeTrackingRef
             ?.takeIf { pendingSyncState.pendingClose == null }
 
-        if (resumableTripId == null) {
+        if (activeTrackingRef == null) {
             Log.i(TAG, "No active trip to resume in foreground service")
             updateTrackingStatus {
                 it.copy(
@@ -305,22 +316,29 @@ class TrackingForegroundService : Service() {
             return
         }
 
-        Log.i(TAG, "Resuming tracking loop for persisted trip $resumableTripId")
+        val resumableTripId = (activeTrackingRef as? com.rastreo.vehicular.data.ActiveTrackingRef.Remote)?.tripId
+        val resumableLocalTripId = when (activeTrackingRef) {
+            is com.rastreo.vehicular.data.ActiveTrackingRef.Remote -> activeTrackingRef.localTripId
+            is com.rastreo.vehicular.data.ActiveTrackingRef.Local -> activeTrackingRef.localTripId
+        }
+
+        Log.i(TAG, "Resuming tracking loop for persisted trip $resumableTripId localTripId=$resumableLocalTripId")
         startTrackingLoop(
             tripId = resumableTripId,
             isRecovery = true,
-            localTripId = pendingSyncState.activeLocalTripId,
+            localTripId = resumableLocalTripId,
         )
     }
 
     private suspend fun startLocationObservation(
-        tripId: Int,
+        tripId: Int?,
+        localTripId: String?,
         observationIntervalMs: Long,
     ) {
         stopLocationObservation()
         locationObservationJob = serviceScope.launch {
             locationRepository.observeLocationUpdates(observationIntervalMs).collect { location ->
-                if (activeTripId != tripId) {
+                if (!isActiveTrackingTarget(tripId, localTripId)) {
                     return@collect
                 }
                 latestObservedLocation = location
@@ -355,11 +373,12 @@ class TrackingForegroundService : Service() {
     }
 
     private suspend fun evaluationLoop(
-        tripId: Int,
+        tripId: Int?,
         evaluationIntervalMs: Long,
         localTripId: String?,
     ) {
-        while (currentCoroutineContext().isActive && activeTripId == tripId) {
+        val isLocalOnlyTracking = tripId == null && localTripId != null
+        while (currentCoroutineContext().isActive && isActiveTrackingTarget(tripId, localTripId)) {
             val loopStartedAt = Instant.now().toString()
             val loopStartedAtMs = System.currentTimeMillis()
             updateTrackingStatus {
@@ -370,10 +389,10 @@ class TrackingForegroundService : Service() {
                     loopStartedAt = loopStartedAt,
                 )
             }
-            val session = sessionStore.sessionData.first()
-            val token = session.token
-            val baseUrl = session.baseUrl.ifBlank { RastreoRepository.productionUrl() }
-            if (token.isBlank()) {
+            val session = if (isLocalOnlyTracking) null else sessionStore.sessionData.first()
+            val token = session?.token.orEmpty()
+            val baseUrl = session?.baseUrl?.ifBlank { RastreoRepository.productionUrl() }.orEmpty()
+            if (!isLocalOnlyTracking && token.isBlank()) {
                 val loopFinishedAt = Instant.now().toString()
                 val loopDurationMs = System.currentTimeMillis() - loopStartedAtMs
                 updateTrackingStatus {
@@ -420,6 +439,7 @@ class TrackingForegroundService : Service() {
             val currentInstant = runCatching { Instant.parse(location.timestamp) }.getOrElse { Instant.now() }
             val validation = validateLocationPoint(
                 tripId = tripId,
+                localTripId = localTripId,
                 location = location,
                 currentInstant = currentInstant,
             )
@@ -474,14 +494,6 @@ class TrackingForegroundService : Service() {
             }
 
             val clientPointId = UUID.randomUUID().toString()
-            val request = TripPointRequest(
-                clientPointId = clientPointId,
-                latitude = location.latitude,
-                longitude = location.longitude,
-                timestamp = location.timestamp,
-                accuracy = location.accuracy,
-                speed = location.speed,
-            )
             val pendingPointDraft = PendingTripPointDraft(
                 tripId = tripId,
                 localTripId = localTripId,
@@ -499,8 +511,10 @@ class TrackingForegroundService : Service() {
                     trackingActive = true,
                     currentTripId = tripId,
                     lastSendAttemptAt = Instant.now().toString(),
-                    sendAttemptsCount = it.sendAttemptsCount + 1,
-                    lastSendType = if (shouldSendPermanencePoint) {
+                    sendAttemptsCount = it.sendAttemptsCount + if (isLocalOnlyTracking) 0 else 1,
+                    lastSendType = if (isLocalOnlyTracking) {
+                        "Cola offline"
+                    } else if (shouldSendPermanencePoint) {
                         "Envio por permanencia"
                     } else {
                         "Envio normal"
@@ -508,7 +522,9 @@ class TrackingForegroundService : Service() {
                     secondsSinceLastAcceptedPoint = validation.elapsedSeconds,
                     distanceMinimumDiscardCountSinceLastAccepted =
                         distanceMinimumDiscardCountSinceLastAccepted,
-                    lastOperationalMessage = if (shouldSendPermanencePoint) {
+                    lastOperationalMessage = if (isLocalOnlyTracking) {
+                        "Encolando punto offline."
+                    } else if (shouldSendPermanencePoint) {
                         "Enviando punto por permanencia."
                     } else {
                         "Enviando punto."
@@ -516,7 +532,37 @@ class TrackingForegroundService : Service() {
                 )
             }
 
-            when (syncPendingPointsForCurrentTrip(tripId, localTripId, token, baseUrl)) {
+            if (isLocalOnlyTracking) {
+                enqueuePendingPoint(pendingPointDraft)
+                val loopFinishedAt = Instant.now().toString()
+                val loopDurationMs = System.currentTimeMillis() - loopStartedAtMs
+                updateTrackingStatus {
+                    it.copy(
+                        serviceRunning = true,
+                        trackingActive = true,
+                        currentTripId = null,
+                        loopFinishedAt = loopFinishedAt,
+                        loopDurationMs = loopDurationMs,
+                        gpsSlowReadCount = it.gpsSlowReadCount + if (loopDurationMs > SLOW_GPS_READ_THRESHOLD_MS) 1 else 0,
+                        gpsVerySlowReadCount = it.gpsVerySlowReadCount + if (loopDurationMs > VERY_SLOW_GPS_READ_THRESHOLD_MS) 1 else 0,
+                        lastOperationalMessage = "Punto agregado a cola offline.",
+                    )
+                }
+                delay(evaluationIntervalMs)
+                continue
+            }
+
+            val remoteTripId = requireNotNull(tripId)
+            val request = TripPointRequest(
+                clientPointId = clientPointId,
+                latitude = location.latitude,
+                longitude = location.longitude,
+                timestamp = location.timestamp,
+                accuracy = location.accuracy,
+                speed = location.speed,
+            )
+
+            when (syncPendingPointsForCurrentTrip(remoteTripId, localTripId, token, baseUrl)) {
                 SyncResult.UNAUTHORIZED -> {
                     enqueuePendingPoint(pendingPointDraft)
                     updateTrackingStatus {
@@ -562,7 +608,7 @@ class TrackingForegroundService : Service() {
                         }
                     } else {
                         val sendPointResult = runCatching {
-                            repository.sendTripPoint(baseUrl, token, tripId, request)
+                            repository.sendTripPoint(baseUrl, token, remoteTripId, request)
                         }
 
                         if (sendPointResult.isSuccess) {
@@ -646,7 +692,7 @@ class TrackingForegroundService : Service() {
                 }
             }
 
-            if (!currentCoroutineContext().isActive || activeTripId != tripId) {
+            if (!currentCoroutineContext().isActive || !isActiveTrackingTarget(tripId, localTripId)) {
                 val loopFinishedAt = Instant.now().toString()
                 val loopDurationMs = System.currentTimeMillis() - loopStartedAtMs
                 updateTrackingStatus {
@@ -679,13 +725,14 @@ class TrackingForegroundService : Service() {
     }
 
     private suspend fun validateLocationPoint(
-        tripId: Int,
+        tripId: Int?,
+        localTripId: String?,
         location: com.rastreo.vehicular.location.LocationSample,
         currentInstant: Instant,
     ): PointValidation {
         val accuracy = location.accuracy
         val requiredDistance = accuracy?.times(2)?.toDouble()
-        val previous = getLocalAcceptedPoint(tripId) ?: return PointValidation(
+        val previous = getLocalAcceptedPoint(tripId, localTripId) ?: return PointValidation(
             isAccepted = accuracy == null || accuracy <= MAX_ACCEPTED_ACCURACY_METERS,
             discardReason = if (accuracy != null && accuracy > MAX_ACCEPTED_ACCURACY_METERS) {
                 "Descartado por precision."
@@ -749,8 +796,12 @@ class TrackingForegroundService : Service() {
         }
     }
 
-    private suspend fun getLocalAcceptedPoint(tripId: Int): AcceptedPoint? {
-        val pendingPoint = pendingSyncStore.getLastPendingPointForTrip(tripId)
+    private suspend fun getLocalAcceptedPoint(tripId: Int?, localTripId: String?): AcceptedPoint? {
+        val pendingPoint = if (tripId != null) {
+            pendingSyncStore.getLastPendingPointForTrip(tripId)
+        } else {
+            localTripId?.let { pendingSyncStore.getLastPendingPointForLocalTrip(it) }
+        }
         return pendingPoint?.toAcceptedPoint() ?: lastAcceptedPoint
     }
 
@@ -775,6 +826,14 @@ class TrackingForegroundService : Service() {
                 currentTripId = point.tripId,
                 lastOperationalMessage = "Punto agregado a cola offline.",
             )
+        }
+    }
+
+    private fun isActiveTrackingTarget(tripId: Int?, localTripId: String?): Boolean {
+        return if (tripId != null) {
+            activeTripId == tripId
+        } else {
+            activeTripId == null && activeLocalOnlyTripId != null && activeLocalOnlyTripId == localTripId
         }
     }
 
@@ -1182,7 +1241,7 @@ class TrackingForegroundService : Service() {
 
         fun createStartIntent(
             context: Context,
-            tripId: Int,
+            tripId: Int?,
             vehicleId: Int? = null,
             category: String? = null,
             localTripId: String? = null,
@@ -1190,7 +1249,9 @@ class TrackingForegroundService : Service() {
         ): Intent {
             return Intent(context, TrackingForegroundService::class.java).apply {
                 action = ACTION_START_TRACKING
-                putExtra(EXTRA_TRIP_ID, tripId)
+                if (tripId != null) {
+                    putExtra(EXTRA_TRIP_ID, tripId)
+                }
                 putExtra(EXTRA_IS_RECOVERY, isRecovery)
                 if (vehicleId != null) {
                     putExtra(EXTRA_VEHICLE_ID, vehicleId)
