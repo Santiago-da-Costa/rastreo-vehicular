@@ -1085,9 +1085,35 @@ class AppViewModel(
         token: String,
     ) {
         refreshPendingSyncUi()
-        val pendingSyncState = pendingSyncStore.getState()
-        val localTrip = preferredSyncLocalTrip(pendingSyncState)
-        val tripId = localTrip?.remoteTripId
+        var pendingSyncState = pendingSyncStore.getState()
+        var localTrip = preferredSyncLocalTrip(pendingSyncState)
+        if (localTrip?.remoteTripId == null && localTrip != null) {
+            when (val createResult = createRemoteTripForLocalTrip(localTrip, token, baseUrl)) {
+                is LocalTripCreateResult.Success -> {
+                    pendingSyncState = pendingSyncStore.getState()
+                    localTrip = pendingSyncState.localTrips.firstOrNull {
+                        it.localTripId == createResult.localTrip.localTripId
+                    } ?: createResult.localTrip
+                }
+                is LocalTripCreateResult.Failure -> {
+                    if (createResult.syncResult == SyncResult.UNAUTHORIZED) {
+                        markSessionExpired(
+                            statusMessage = "Sesion expirada. Inicia sesion nuevamente.",
+                            operationMessage = "Sesion expirada.",
+                            preserveTripId = null,
+                            pendingTripClose = pendingSyncState.pendingClose != null,
+                            clearUserContext = false,
+                        )
+                    } else {
+                        refreshPendingSyncUi()
+                    }
+                    return
+                }
+            }
+        }
+
+        val syncedLocalTrip = localTrip
+        val tripId = syncedLocalTrip?.remoteTripId
             ?: pendingSyncState.pendingClose?.tripId
             ?: pendingSyncState.activeTripId
             ?: pendingSyncState.pendingPoints.firstOrNull()?.tripId
@@ -1095,10 +1121,10 @@ class AppViewModel(
 
         recordSyncAttempt()
 
-        val pointsSyncResult = if (localTrip?.remoteTripId != null) {
+        val pointsSyncResult = if (syncedLocalTrip?.remoteTripId != null) {
             syncPendingPointsForLocalTrip(
-                localTripId = localTrip.localTripId,
-                remoteTripId = localTrip.remoteTripId,
+                localTripId = syncedLocalTrip.localTripId,
+                remoteTripId = syncedLocalTrip.remoteTripId,
                 token = token,
                 baseUrl = baseUrl,
             )
@@ -1107,7 +1133,16 @@ class AppViewModel(
         }
 
         when (pointsSyncResult) {
-            SyncResult.SUCCESS -> runPendingCloseSyncAttempt(token, baseUrl)
+            SyncResult.SUCCESS -> {
+                if (
+                    syncedLocalTrip?.remoteTripId != null &&
+                    syncedLocalTrip.status == PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED_LOCAL
+                ) {
+                    syncClosedLocalTripStop(syncedLocalTrip, token, baseUrl)
+                } else {
+                    runPendingCloseSyncAttempt(token, baseUrl)
+                }
+            }
             SyncResult.UNAUTHORIZED -> {
                 val hasPendingClose = pendingSyncStore.getState().pendingClose != null
                 markSessionExpired(
@@ -1120,6 +1155,60 @@ class AppViewModel(
             }
             SyncResult.RETRY_LATER -> refreshPendingSyncUi(forceTripId = tripId)
         }
+    }
+
+    private suspend fun createRemoteTripForLocalTrip(
+        localTrip: LocalTrip,
+        token: String,
+        baseUrl: String,
+    ): LocalTripCreateResult {
+        recordSyncAttempt()
+        _uiState.update {
+            it.copy(operationMessage = "Creando recorrido remoto pendiente.")
+        }
+
+        val startTripResult = runCatching {
+            repository.startTrip(
+                baseUrl = baseUrl,
+                token = token,
+                vehicleId = localTrip.vehicleId,
+                categoria = localTrip.categoria,
+                clientTripId = localTrip.clientTripId,
+            )
+        }
+
+        val startedTrip = startTripResult.getOrNull()
+        if (startedTrip != null) {
+            val updatedLocalTrip = localTrip.copy(
+                remoteTripId = startedTrip.id,
+                syncState = PendingSyncStore.LOCAL_TRIP_SYNC_CREATED_REMOTE,
+            )
+            pendingSyncStore.updateLocalTripRemoteId(localTrip.localTripId, startedTrip.id)
+            if (localTrip.status == PendingSyncStore.LOCAL_TRIP_STATUS_ACTIVE) {
+                pendingSyncStore.setActiveTripId(startedTrip.id)
+            }
+            clearSyncError()
+            refreshPendingSyncUi(forceTripId = startedTrip.id)
+            return LocalTripCreateResult.Success(updatedLocalTrip)
+        }
+
+        val startError = startTripResult.exceptionOrNull()
+        recordSyncFailure(
+            if (isUnauthorizedError(startError)) {
+                "Sesion expirada al crear recorrido remoto pendiente."
+            } else if (isNetworkError(startError)) {
+                "No se pudo crear el recorrido remoto pendiente por problema de conexion."
+            } else {
+                startError?.message ?: "No se pudo crear el recorrido remoto pendiente."
+            }
+        )
+        return LocalTripCreateResult.Failure(
+            if (isUnauthorizedError(startError)) {
+                SyncResult.UNAUTHORIZED
+            } else {
+                SyncResult.RETRY_LATER
+            }
+        )
     }
 
     private suspend fun runPendingCloseSyncAttempt(
@@ -1339,6 +1428,74 @@ class AppViewModel(
         }
     }
 
+    private suspend fun syncClosedLocalTripStop(
+        localTrip: LocalTrip,
+        token: String,
+        baseUrl: String,
+    ): SyncResult {
+        val remoteTripId = localTrip.remoteTripId ?: return SyncResult.RETRY_LATER
+        val hasPendingPoints = hasPendingPointsForLocalTripOrLegacy(
+            localTrip.localTripId,
+            remoteTripId,
+        )
+        if (hasPendingPoints) {
+            refreshPendingSyncUi(forceTripId = remoteTripId)
+            return SyncResult.RETRY_LATER
+        }
+
+        recordSyncAttempt()
+        val stopTripResult = runCatching {
+            repository.stopTrip(baseUrl, token, remoteTripId)
+        }
+
+        if (stopTripResult.isSuccess) {
+            val closedAt = Instant.now().toString()
+            pendingSyncStore.updateLocalTrip(localTrip.localTripId) {
+                it.copy(
+                    endTime = it.endTime ?: closedAt,
+                    status = PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED,
+                    syncState = PendingSyncStore.LOCAL_TRIP_SYNC_SYNCED,
+                )
+            }
+            pendingSyncStore.clearPendingClose(remoteTripId)
+            pendingSyncStore.setActiveTripId(null)
+            lastAcceptedPoint = null
+            distanceMinimumDiscardCountSinceLastAccepted = 0
+            clearSyncError()
+            refreshPendingSyncUi(preserveCurrentTripId = false)
+            _uiState.update { state ->
+                state.copy(
+                    isBusy = false,
+                    currentTripId = null,
+                    pendingTripClose = false,
+                    autoCloseRetryActive = false,
+                    autoCloseRetryStatus = "Cierre completado",
+                    statusMessage = "Recorrido cerrado correctamente.",
+                    operationMessage = "Recorrido cerrado.",
+                    lastErrorMessage = "",
+                )
+            }
+            return SyncResult.SUCCESS
+        }
+
+        val stopError = stopTripResult.exceptionOrNull()
+        recordSyncFailure(
+            if (isUnauthorizedError(stopError)) {
+                "Sesion expirada al sincronizar cierre pendiente."
+            } else if (isNetworkError(stopError)) {
+                "No se pudo sincronizar el cierre pendiente por problema de conexion."
+            } else {
+                stopError?.message ?: "No se pudo sincronizar el cierre pendiente."
+            }
+        )
+        return if (isUnauthorizedError(stopError)) {
+            SyncResult.UNAUTHORIZED
+        } else {
+            refreshPendingSyncUi(forceTripId = remoteTripId)
+            SyncResult.RETRY_LATER
+        }
+    }
+
     private suspend fun getPendingPointsForLocalTripOrLegacy(
         localTripId: String,
         remoteTripId: Int,
@@ -1362,13 +1519,17 @@ class AppViewModel(
     private fun preferredSyncLocalTrip(pendingSyncState: PendingSyncState): LocalTrip? {
         return pendingSyncState.activeLocalTripId?.let { activeLocalTripId ->
             pendingSyncState.localTrips.firstOrNull {
-                it.localTripId == activeLocalTripId && it.remoteTripId != null
+                it.localTripId == activeLocalTripId &&
+                    (it.remoteTripId != null || it.status == PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED_LOCAL)
             }
         } ?: pendingSyncState.activeTripId?.let { activeTripId ->
             pendingSyncState.localTrips.firstOrNull {
                 it.remoteTripId == activeTripId &&
                     it.status == PendingSyncStore.LOCAL_TRIP_STATUS_ACTIVE
             }
+        } ?: pendingSyncState.localTrips.firstOrNull {
+            it.remoteTripId == null &&
+                it.status == PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED_LOCAL
         }
     }
 
@@ -1382,6 +1543,11 @@ class AppViewModel(
             it.remoteTripId == pendingCloseTripId &&
                 it.status == PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED
         }
+    }
+
+    private sealed class LocalTripCreateResult {
+        data class Success(val localTrip: LocalTrip) : LocalTripCreateResult()
+        data class Failure(val syncResult: SyncResult) : LocalTripCreateResult()
     }
 
     private fun ensurePendingCloseRetry() {

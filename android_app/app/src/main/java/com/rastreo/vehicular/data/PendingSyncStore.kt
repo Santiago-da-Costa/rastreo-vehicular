@@ -438,5 +438,6 @@ class PendingSyncStore(private val context: Context) {
         const val LOCAL_TRIP_SYNC_CREATED_REMOTE = "CREATED_REMOTE"
         const val LOCAL_TRIP_SYNC_PENDING_CREATE = "PENDING_CREATE"
         const val LOCAL_TRIP_SYNC_PENDING_CLOSE = "PENDING_CLOSE"
+        const val LOCAL_TRIP_SYNC_SYNCED = "SYNCED"
     }
 }
