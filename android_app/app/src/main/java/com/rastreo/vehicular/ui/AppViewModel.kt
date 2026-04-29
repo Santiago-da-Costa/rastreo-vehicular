@@ -827,33 +827,55 @@ class AppViewModel(
     }
 
     fun stopTracking() {
-        val fallbackTripId = uiState.value.currentTripId ?: run {
-            val message = "No hay trip activo."
-            _uiState.update {
-                it.copy(
-                    statusMessage = message,
-                    operationMessage = "No hay trip activo.",
-                    lastErrorMessage = message,
-                )
-            }
-            return
-        }
         viewModelScope.launch {
-            val activeTrackingRef = pendingSyncStore.getState().activeTrackingRef
-                ?: ActiveTrackingRef.Remote(
-                    tripId = fallbackTripId,
-                    localTripId = pendingSyncStore.getActiveLocalTrip()?.localTripId,
-                )
+            val pendingSyncState = pendingSyncStore.getState()
+            val activeTrackingRef = pendingSyncState.activeTrackingRef
+                ?: uiState.value.currentTripId?.let { fallbackTripId ->
+                    ActiveTrackingRef.Remote(
+                        tripId = fallbackTripId,
+                        localTripId = pendingSyncStore.getActiveLocalTrip()?.localTripId,
+                    )
+                }
+                ?: run {
+                    val message = "No hay trip activo."
+                    _uiState.update {
+                        it.copy(
+                            statusMessage = message,
+                            operationMessage = "No hay trip activo.",
+                            lastErrorMessage = message,
+                        )
+                    }
+                    return@launch
+                }
 
             if (activeTrackingRef is ActiveTrackingRef.Local) {
-                val message = "Tracking local pendiente de implementacion."
+                stopTrackingService(appContext)
+                val closedLocalTrip = pendingSyncStore.markLocalTripClosedLocally(
+                    localTripId = activeTrackingRef.localTripId,
+                )
+                if (closedLocalTrip == null) {
+                    val message = "No se encontro el recorrido local activo."
+                    _uiState.update {
+                        it.copy(
+                            isBusy = false,
+                            isTracking = false,
+                            currentTripId = null,
+                            statusMessage = message,
+                            operationMessage = "Cierre local no aplicado.",
+                            lastErrorMessage = message,
+                        )
+                    }
+                    return@launch
+                }
+
+                val message = "Recorrido local cerrado. Queda pendiente de sincronizacion."
                 _uiState.update {
                     it.copy(
                         isBusy = false,
                         isTracking = false,
+                        currentTripId = null,
                         statusMessage = message,
-                        operationMessage = "Tracking local sin cierre remoto.",
-                        lastErrorMessage = message,
+                        operationMessage = "Cierre local pendiente de sincronizacion.",
                     )
                 }
                 return@launch

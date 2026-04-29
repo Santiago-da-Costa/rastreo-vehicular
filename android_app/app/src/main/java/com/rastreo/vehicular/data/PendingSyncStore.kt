@@ -198,6 +198,34 @@ class PendingSyncStore(private val context: Context) {
         }
     }
 
+    suspend fun markLocalTripClosedLocally(
+        localTripId: String,
+        endTime: String = Instant.now().toString(),
+    ): LocalTrip? {
+        var closedLocalTrip: LocalTrip? = null
+        editState { state ->
+            state.copy(
+                localTrips = state.localTrips.map { localTrip ->
+                    if (localTrip.localTripId == localTripId) {
+                        localTrip.copy(
+                            endTime = endTime,
+                            status = LOCAL_TRIP_STATUS_CLOSED_LOCAL,
+                            syncState = if (localTrip.remoteTripId == null) {
+                                LOCAL_TRIP_SYNC_PENDING_CREATE
+                            } else {
+                                LOCAL_TRIP_SYNC_PENDING_CLOSE
+                            },
+                        ).also { closedLocalTrip = it }
+                    } else {
+                        localTrip
+                    }
+                }.sortedLocalTrips(),
+                activeLocalTripId = state.activeLocalTripId.takeIf { it != localTripId },
+            )
+        }
+        return closedLocalTrip
+    }
+
     suspend fun removeLocalTrip(localTripId: String) {
         editState { state ->
             state.copy(
@@ -405,7 +433,10 @@ class PendingSyncStore(private val context: Context) {
     companion object {
         const val LOCAL_TRIP_STATUS_ACTIVE = "ACTIVE"
         const val LOCAL_TRIP_STATUS_CLOSED = "CLOSED"
+        const val LOCAL_TRIP_STATUS_CLOSED_LOCAL = "CLOSED_LOCAL"
         const val LOCAL_TRIP_SYNC_LOCAL_CREATED = "LOCAL_CREATED"
         const val LOCAL_TRIP_SYNC_CREATED_REMOTE = "CREATED_REMOTE"
+        const val LOCAL_TRIP_SYNC_PENDING_CREATE = "PENDING_CREATE"
+        const val LOCAL_TRIP_SYNC_PENDING_CLOSE = "PENDING_CLOSE"
     }
 }
