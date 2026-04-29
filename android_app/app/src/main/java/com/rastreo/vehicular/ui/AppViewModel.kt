@@ -59,6 +59,9 @@ data class UiState(
     val pendingPointCount: Int = 0,
     val pendingQueueTripId: Int? = null,
     val pendingCloseTripId: Int? = null,
+    val activeTrackingRef: ActiveTrackingRef? = null,
+    val activeLocalTripId: String? = null,
+    val lastLocalTrip: LocalTrip? = null,
     val lastSyncAttemptAt: String = "Sin intentos",
     val lastSyncError: String = "Sin error",
     val queuedPointsUploadedCount: Int = 0,
@@ -256,7 +259,6 @@ class AppViewModel(
                         loopStartedAt = status.loopStartedAt,
                         loopFinishedAt = status.loopFinishedAt,
                         loopDurationMs = status.loopDurationMs,
-                        isTracking = state.isTracking || status.trackingActive,
                         serviceRunning = status.serviceRunning,
                         lastLocationText = buildLastLocationText(status),
                         lastAttemptText = status.lastReadAttemptAt,
@@ -319,30 +321,27 @@ class AppViewModel(
             pendingSyncStore.pendingSyncState.collect { pendingSyncState ->
                 val pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId
                 val pendingCloseTripId = pendingSyncState.pendingClose?.tripId
-                val hasActiveTrip = pendingSyncState.activeTripId != null && pendingCloseTripId == null
-                val hasActiveLocalTrip = pendingSyncState.activeTrackingRef is ActiveTrackingRef.Local
+                val activeTrackingRef = pendingSyncState.activeTrackingRef
                 val storedTripId = pendingCloseTripId
-                    ?: pendingSyncState.activeTripId
+                    ?: activeTrackingRef?.tripIdOrNull()
                     ?: pendingQueueTripId
 
                 _uiState.update { state ->
                     state.copy(
                         currentTripId = when {
-                            state.isTracking -> state.currentTripId ?: storedTripId
                             storedTripId != null -> storedTripId
                             else -> state.currentTripId
                         },
-                        isTracking = when {
-                            state.isTracking -> true
-                            hasActiveLocalTrip -> true
-                            hasActiveTrip -> true
-                            else -> false
-                        },
+                        isTracking = activeTrackingRef != null,
                         pendingTripClose = pendingSyncState.pendingClose != null,
                         pendingPointCount = pendingSyncState.pendingPoints.size,
                         pendingQueueTripId = pendingQueueTripId,
                         pendingCloseTripId = pendingCloseTripId,
+                        activeTrackingRef = activeTrackingRef,
+                        activeLocalTripId = pendingSyncState.activeLocalTripId,
+                        lastLocalTrip = pendingSyncState.localTrips.lastOrNull(),
                         autoCloseRetryStatus = if (pendingCloseTripId == null &&
+                            !hasClosedLocalTripPendingSync(pendingSyncState) &&
                             pendingCloseRetryJob?.isActive != true
                         ) {
                             "Sin cierre pendiente"
@@ -369,9 +368,12 @@ class AppViewModel(
         state: UiState,
         status: TrackingStatus,
     ): String {
+        if (state.pendingTripClose) {
+            return state.operationMessage
+        }
+
         return if (
             status.serviceRunning ||
-            status.trackingActive ||
             status.currentTripId != null ||
             status.lastOperationalMessage != "Esperando accion."
         ) {
@@ -524,6 +526,9 @@ class AppViewModel(
                     pendingPointCount = pendingSyncState.pendingPoints.size,
                     pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId,
                     pendingCloseTripId = pendingSyncState.pendingClose?.tripId,
+                    activeTrackingRef = null,
+                    activeLocalTripId = pendingSyncState.activeLocalTripId,
+                    lastLocalTrip = pendingSyncState.localTrips.lastOrNull(),
                     autoCloseRetryActive = false,
                     autoCloseRetryStatus = "Sin cierre pendiente",
                     refreshAvailable = false,
@@ -790,6 +795,10 @@ class AppViewModel(
                         isTracking = true,
                         isSessionInvalid = false,
                         pendingTripClose = false,
+                        activeTrackingRef = ActiveTrackingRef.Remote(
+                            tripId = trip.id,
+                            localTripId = localTripId,
+                        ),
                         statusMessage = "Trip ${trip.id} iniciado. Enviando ubicacion...",
                         operationMessage = "Trip ${trip.id} iniciado.",
                         lastErrorMessage = "",
@@ -834,6 +843,7 @@ class AppViewModel(
                             currentTripId = null,
                             isSessionInvalid = false,
                             pendingTripClose = false,
+                            activeTrackingRef = ActiveTrackingRef.Local(localTripId),
                             statusMessage = "Recorrido local iniciado. Queda pendiente de sincronizacion.",
                             operationMessage = "Recorrido local iniciado.",
                             lastErrorMessage = "",
@@ -888,12 +898,6 @@ class AppViewModel(
         viewModelScope.launch {
             val pendingSyncState = pendingSyncStore.getState()
             val activeTrackingRef = pendingSyncState.activeTrackingRef
-                ?: uiState.value.currentTripId?.let { fallbackTripId ->
-                    ActiveTrackingRef.Remote(
-                        tripId = fallbackTripId,
-                        localTripId = pendingSyncStore.getActiveLocalTrip()?.localTripId,
-                    )
-                }
                 ?: run {
                     val message = "No hay trip activo."
                     _uiState.update {
@@ -917,6 +921,7 @@ class AppViewModel(
                             isBusy = false,
                             isTracking = false,
                             currentTripId = null,
+                            activeTrackingRef = null,
                             statusMessage = message,
                             operationMessage = "Cierre local no aplicado.",
                             lastErrorMessage = message,
@@ -926,11 +931,13 @@ class AppViewModel(
                 }
 
                 val message = "Recorrido local cerrado. Queda pendiente de sincronizacion."
+                ensurePendingCloseRetry()
                 _uiState.update {
                     it.copy(
                         isBusy = false,
                         isTracking = false,
                         currentTripId = null,
+                        activeTrackingRef = null,
                         statusMessage = message,
                         operationMessage = "Cierre local pendiente de sincronizacion.",
                     )
@@ -944,6 +951,7 @@ class AppViewModel(
                 it.copy(
                     isBusy = true,
                     isTracking = false,
+                    activeTrackingRef = null,
                     statusMessage = "Deteniendo trip $tripId...",
                 )
             }
@@ -974,6 +982,7 @@ class AppViewModel(
                             isBusy = false,
                             isTracking = false,
                             isSessionInvalid = false,
+                            activeTrackingRef = null,
                             statusMessage = "Trip $tripId detenido.",
                             operationMessage = "Tracking detenido.",
                         )
@@ -1002,6 +1011,7 @@ class AppViewModel(
                         it.copy(
                             isBusy = false,
                             currentTripId = tripId,
+                            activeTrackingRef = null,
                             pendingTripClose = true,
                             statusMessage = message,
                             operationMessage = if (pointsStillPending) {
@@ -1061,6 +1071,9 @@ class AppViewModel(
                 pendingPointCount = pendingSyncState.pendingPoints.size,
                 pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId,
                 pendingCloseTripId = pendingSyncState.pendingClose?.tripId,
+                activeTrackingRef = pendingSyncState.activeTrackingRef.takeIf { !pendingTripClose },
+                activeLocalTripId = pendingSyncState.activeLocalTripId,
+                lastLocalTrip = pendingSyncState.localTrips.lastOrNull(),
                 autoCloseRetryActive = false,
                 autoCloseRetryStatus = if (pendingTripClose) {
                     "Sesion invalida"
@@ -1090,33 +1103,30 @@ class AppViewModel(
         val session = sessionStore.sessionData.first()
         val pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId
         val pendingCloseTripId = pendingSyncState.pendingClose?.tripId
-        val hasActiveTrip = pendingSyncState.activeTripId != null && pendingCloseTripId == null
-        val hasActiveLocalTrip = pendingSyncState.activeTrackingRef is ActiveTrackingRef.Local
+        val activeTrackingRef = pendingSyncState.activeTrackingRef
         val storedTripId = forceTripId
             ?: pendingCloseTripId
-            ?: pendingSyncState.activeTripId
+            ?: activeTrackingRef?.tripIdOrNull()
             ?: pendingQueueTripId
 
         _uiState.update { state ->
             state.copy(
                 currentTripId = when {
-                    state.isTracking -> state.currentTripId
                     storedTripId != null -> storedTripId
                     preserveCurrentTripId -> state.currentTripId
                     else -> null
                 },
-                isTracking = when {
-                    state.isTracking -> true
-                    hasActiveLocalTrip -> true
-                    hasActiveTrip -> true
-                    else -> false
-                },
+                isTracking = activeTrackingRef != null,
                 pendingTripClose = pendingSyncState.pendingClose != null,
                 pendingPointCount = pendingSyncState.pendingPoints.size,
                 pendingQueueTripId = pendingQueueTripId,
                 pendingCloseTripId = pendingCloseTripId,
+                activeTrackingRef = activeTrackingRef,
+                activeLocalTripId = pendingSyncState.activeLocalTripId,
+                lastLocalTrip = pendingSyncState.localTrips.lastOrNull(),
                 refreshAvailable = session.refreshToken.isNotBlank(),
                 autoCloseRetryStatus = if (pendingCloseTripId == null &&
+                    !hasClosedLocalTripPendingSync(pendingSyncState) &&
                     pendingCloseRetryJob?.isActive != true
                 ) {
                     "Sin cierre pendiente"
@@ -1150,6 +1160,19 @@ class AppViewModel(
         token: String,
     ) {
         refreshPendingSyncUi()
+        while (true) {
+            val result = syncNextPendingStateAfterAuthenticatedSession(baseUrl, token)
+            val pendingSyncState = pendingSyncStore.getState()
+            if (result != SyncResult.SUCCESS || !hasClosedLocalTripPendingSync(pendingSyncState)) {
+                return
+            }
+        }
+    }
+
+    private suspend fun syncNextPendingStateAfterAuthenticatedSession(
+        baseUrl: String,
+        token: String,
+    ): SyncResult {
         var pendingSyncState = pendingSyncStore.getState()
         var localTrip = preferredSyncLocalTrip(pendingSyncState)
         if (localTrip?.remoteTripId == null && localTrip != null) {
@@ -1172,7 +1195,7 @@ class AppViewModel(
                     } else {
                         refreshPendingSyncUi()
                     }
-                    return
+                    return createResult.syncResult
                 }
             }
         }
@@ -1182,7 +1205,7 @@ class AppViewModel(
             ?: pendingSyncState.pendingClose?.tripId
             ?: pendingSyncState.activeTripId
             ?: pendingSyncState.pendingPoints.firstOrNull()?.tripId
-            ?: return
+            ?: return SyncResult.SUCCESS
 
         recordSyncAttempt()
 
@@ -1203,9 +1226,9 @@ class AppViewModel(
                     syncedLocalTrip?.remoteTripId != null &&
                     syncedLocalTrip.status == PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED_LOCAL
                 ) {
-                    syncClosedLocalTripStop(syncedLocalTrip, token, baseUrl)
+                    return syncClosedLocalTripStop(syncedLocalTrip, token, baseUrl)
                 } else {
-                    runPendingCloseSyncAttempt(token, baseUrl)
+                    return runPendingCloseSyncAttempt(token, baseUrl)
                 }
             }
             SyncResult.UNAUTHORIZED -> {
@@ -1217,8 +1240,12 @@ class AppViewModel(
                     pendingTripClose = hasPendingClose,
                     clearUserContext = false,
                 )
+                return SyncResult.UNAUTHORIZED
             }
-            SyncResult.RETRY_LATER -> refreshPendingSyncUi(forceTripId = tripId)
+            SyncResult.RETRY_LATER -> {
+                refreshPendingSyncUi(forceTripId = tripId)
+                return SyncResult.RETRY_LATER
+            }
         }
     }
 
@@ -1534,9 +1561,9 @@ class AppViewModel(
                     currentTripId = null,
                     pendingTripClose = false,
                     autoCloseRetryActive = false,
-                    autoCloseRetryStatus = "Cierre completado",
-                    statusMessage = "Recorrido cerrado correctamente.",
-                    operationMessage = "Recorrido cerrado.",
+                    autoCloseRetryStatus = "Recorrido local sincronizado",
+                    statusMessage = "Recorrido local sincronizado.",
+                    operationMessage = "Recorrido local sincronizado.",
                     lastErrorMessage = "",
                 )
             }
@@ -1593,8 +1620,15 @@ class AppViewModel(
                     it.status == PendingSyncStore.LOCAL_TRIP_STATUS_ACTIVE
             }
         } ?: pendingSyncState.localTrips.firstOrNull {
-            it.remoteTripId == null &&
-                it.status == PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED_LOCAL
+            it.status == PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED_LOCAL &&
+                it.syncState != PendingSyncStore.LOCAL_TRIP_SYNC_SYNCED
+        }
+    }
+
+    private fun hasClosedLocalTripPendingSync(pendingSyncState: PendingSyncState): Boolean {
+        return pendingSyncState.localTrips.any { localTrip ->
+            localTrip.status == PendingSyncStore.LOCAL_TRIP_STATUS_CLOSED_LOCAL &&
+                localTrip.syncState != PendingSyncStore.LOCAL_TRIP_SYNC_SYNCED
         }
     }
 
@@ -1634,16 +1668,22 @@ class AppViewModel(
         }
         pendingCloseRetryJob = viewModelScope.launch {
             while (true) {
-                val pendingClose = pendingSyncStore.getState().pendingClose
+                val pendingSyncState = pendingSyncStore.getState()
+                val pendingClose = pendingSyncState.pendingClose
+                val hasPendingLocalClose = hasClosedLocalTripPendingSync(pendingSyncState)
                 val session = sessionStore.sessionData.first()
                 val currentState = uiState.value
 
-                if (pendingClose == null || currentState.isSessionInvalid || session.token.isBlank()) {
+                if (
+                    (pendingClose == null && !hasPendingLocalClose) ||
+                    currentState.isSessionInvalid ||
+                    session.token.isBlank()
+                ) {
                     _uiState.update { state ->
                         state.copy(
                             autoCloseRetryActive = false,
                             autoCloseRetryStatus = when {
-                                pendingClose == null -> "Sin cierre pendiente"
+                                pendingClose == null && !hasPendingLocalClose -> "Sin cierre pendiente"
                                 currentState.isSessionInvalid -> "Sesion invalida"
                                 session.token.isBlank() -> "Sin token"
                                 else -> state.autoCloseRetryStatus
@@ -1677,26 +1717,48 @@ class AppViewModel(
 
                 _uiState.update { state ->
                     state.copy(
-                        operationMessage = "Reintentando cierre pendiente.",
+                        operationMessage = if (hasPendingLocalClose) {
+                            "Reintentando sincronizacion local pendiente."
+                        } else {
+                            "Reintentando cierre pendiente."
+                        },
                         autoCloseRetryActive = true,
                         autoCloseRetryStatus = "Intentando sync",
                     )
                 }
 
-                when (
+                val syncResult = if (hasPendingLocalClose) {
+                    syncNextPendingStateAfterAuthenticatedSession(
+                        token = session.token,
+                        baseUrl = currentState.baseUrl,
+                    )
+                } else {
                     runPendingCloseSyncAttempt(
                         token = session.token,
                         baseUrl = currentState.baseUrl,
                     )
-                ) {
+                }
+
+                when (syncResult) {
                     SyncResult.SUCCESS -> {
+                        val stillPending = pendingSyncStore.getState().let { latestState ->
+                            latestState.pendingClose != null || hasClosedLocalTripPendingSync(latestState)
+                        }
                         _uiState.update { state ->
                             state.copy(
-                                autoCloseRetryActive = false,
-                                autoCloseRetryStatus = "Cierre completado",
+                                autoCloseRetryActive = stillPending,
+                                autoCloseRetryStatus = if (stillPending) {
+                                    "Auto cierre activo"
+                                } else if (hasPendingLocalClose) {
+                                    "Recorrido local sincronizado"
+                                } else {
+                                    "Cierre completado"
+                                },
                             )
                         }
-                        break
+                        if (!stillPending) {
+                            break
+                        }
                     }
                     SyncResult.UNAUTHORIZED -> {
                         _uiState.update { state ->
@@ -1707,9 +1769,13 @@ class AppViewModel(
                         }
                         val hasPendingClose = pendingSyncStore.getState().pendingClose != null
                         markSessionExpired(
-                            statusMessage = "Sesion expirada. El cierre del recorrido quedo pendiente.",
+                            statusMessage = if (hasPendingLocalClose) {
+                                "Sesion expirada. El recorrido local quedo pendiente."
+                            } else {
+                                "Sesion expirada. El cierre del recorrido quedo pendiente."
+                            },
                             operationMessage = "Cierre pendiente por sesion expirada.",
-                            preserveTripId = pendingClose.tripId,
+                            preserveTripId = pendingClose?.tripId,
                             pendingTripClose = hasPendingClose,
                             clearUserContext = false,
                         )
@@ -1824,4 +1890,8 @@ class AppViewModelFactory(
             locationRepository = LocationRepository(context),
         ) as T
     }
+}
+
+private fun ActiveTrackingRef.tripIdOrNull(): Int? {
+    return (this as? ActiveTrackingRef.Remote)?.tripId
 }

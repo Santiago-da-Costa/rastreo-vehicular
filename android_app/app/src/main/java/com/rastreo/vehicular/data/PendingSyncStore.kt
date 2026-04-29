@@ -160,6 +160,24 @@ class PendingSyncStore(private val context: Context) {
         }
     }
 
+    suspend fun getPendingLocalTrips(): List<LocalTrip> {
+        return getState().localTrips.filter { localTrip ->
+            localTrip.status == LOCAL_TRIP_STATUS_ACTIVE ||
+                localTrip.status == LOCAL_TRIP_STATUS_CLOSED_LOCAL ||
+                localTrip.syncState != LOCAL_TRIP_SYNC_SYNCED
+        }
+    }
+
+    suspend fun getLastLocalTrip(): LocalTrip? {
+        return getState().localTrips.sortedLocalTrips().lastOrNull()
+    }
+
+    suspend fun getUnsyncedLocalTrips(): List<LocalTrip> {
+        return getState().localTrips.filter { localTrip ->
+            localTrip.syncState != LOCAL_TRIP_SYNC_SYNCED
+        }
+    }
+
     suspend fun updateLocalTrip(
         localTripId: String,
         transform: (LocalTrip) -> LocalTrip,
@@ -355,19 +373,19 @@ class PendingSyncStore(private val context: Context) {
     }
 
     private fun StoredPendingSyncState.toActiveTrackingRef(): ActiveTrackingRef? {
-        activeTripId?.let { tripId ->
-            return ActiveTrackingRef.Remote(
-                tripId = tripId,
-                localTripId = activeLocalTripId,
-            )
+        if (pendingClose != null) {
+            return null
         }
 
-        val activeLocalTrip = activeLocalTripId?.let { localTripId ->
-            localTrips.orEmpty().firstOrNull {
-                it.localTripId == localTripId &&
-                    it.status == LOCAL_TRIP_STATUS_ACTIVE &&
-                    it.remoteTripId == null
-            }
+        val activeLocalTrip = findActiveLocalTrip(activeTripId)
+            ?.takeIf { it.status == LOCAL_TRIP_STATUS_ACTIVE }
+            ?: localTrips.orEmpty().firstOrNull { it.status == LOCAL_TRIP_STATUS_ACTIVE }
+
+        activeLocalTrip?.remoteTripId?.let { tripId ->
+            return ActiveTrackingRef.Remote(
+                tripId = tripId,
+                localTripId = activeLocalTrip.localTripId,
+            )
         }
 
         return activeLocalTrip?.let { ActiveTrackingRef.Local(it.localTripId) }

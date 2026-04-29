@@ -337,7 +337,7 @@ private fun MainControlsCard(
     onRefreshVehicles: () -> Unit,
 ) {
     val userCanTrack = state.currentUser?.permissions?.get("edit_trips") == true
-    val isTrackingActive = state.isTracking
+    val canStopTracking = state.activeTrackingRef != null && !state.pendingTripClose
     var vehicleExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
 
@@ -354,22 +354,22 @@ private fun MainControlsCard(
             ) {
                 Button(
                     onClick = {
-                        if (isTrackingActive) {
+                        if (canStopTracking) {
                             onStopTracking()
                         } else {
                             onStartTracking()
                         }
                     },
-                    enabled = if (isTrackingActive) !state.isBusy else userCanTrack && !state.isBusy,
+                    enabled = if (canStopTracking) !state.isBusy else userCanTrack && !state.isBusy,
                     modifier = Modifier.size(140.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isTrackingActive) Color(0xFFB3261E) else Color(0xFF2E7D32),
+                        containerColor = if (canStopTracking) Color(0xFFB3261E) else Color(0xFF2E7D32),
                     ),
                     contentPadding = PaddingValues(12.dp),
                 ) {
                     Text(
-                        text = if (isTrackingActive) "DETENER" else "INICIAR",
+                        text = if (canStopTracking) "DETENER" else "INICIAR",
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
                     )
@@ -457,7 +457,7 @@ private fun MainControlsCard(
                     Text("Recargar vehiculos")
                 }
                 Text(
-                    text = if (userCanTrack || isTrackingActive) {
+                    text = if (userCanTrack || canStopTracking) {
                         buildSelectionHint(state)
                     } else {
                         "Este usuario no tiene permiso para iniciar recorridos."
@@ -516,6 +516,10 @@ private fun DeveloperDiagnosticsCard(
                     "Puntos pendientes: ${state.pendingPointCount}",
                     "Estado de sync: ${state.lastSyncError}",
                 ),
+            )
+            SummarySection(
+                title = "Recorrido local",
+                lines = buildLocalTripDiagnosticLines(state),
             )
             SummarySection(
                 title = "Tiempos",
@@ -791,8 +795,31 @@ private fun formatBoolean(value: Boolean): String {
     return if (value) "si" else "no"
 }
 
+private fun buildLocalTripDiagnosticLines(state: UiState): List<String> {
+    val localTrip = state.lastLocalTrip
+    if (localTrip == null) {
+        return listOf(
+            "activeLocalTripId: ${state.activeLocalTripId ?: "Sin dato"}",
+            "Sin recorrido local",
+        )
+    }
+    return listOf(
+        "activeLocalTripId: ${state.activeLocalTripId ?: "Sin dato"}",
+        "localTripId: ${localTrip.localTripId}",
+        "clientTripId: ${localTrip.clientTripId}",
+        "remoteTripId: ${localTrip.remoteTripId?.toString() ?: "Sin dato"}",
+        "vehicleId: ${localTrip.vehicleId}",
+        "categoria: ${localTrip.categoria.ifBlank { "Sin dato" }}",
+        "status: ${localTrip.status}",
+        "syncState: ${localTrip.syncState}",
+        "startTime: ${formatTimestamp(localTrip.startTime)}",
+        "endTime: ${localTrip.endTime?.let(::formatTimestamp) ?: "Sin dato"}",
+    )
+}
+
 private fun buildSelectionHint(state: UiState): String {
     return when {
+        state.pendingTripClose -> "Recorrido detenido (pendiente de sincronizacion)."
         state.isTracking -> "Recorrido en curso."
         state.selectedVehicleId == null && state.category.isBlank() -> "Seleccione vehiculo y categoria."
         state.selectedVehicleId == null -> "Seleccione un vehiculo."
@@ -807,6 +834,9 @@ private fun resolveOperationalMessage(state: UiState): String {
 
     if (state.isSessionInvalid) {
         return "Sesion expirada. Inicie sesion nuevamente."
+    }
+    if (state.pendingTripClose) {
+        return "Recorrido detenido (pendiente de sincronizacion)"
     }
     if (state.isBusy) {
         return if (state.currentTripId != null && !state.isTracking) {
