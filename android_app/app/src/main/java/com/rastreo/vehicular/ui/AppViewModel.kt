@@ -320,6 +320,7 @@ class AppViewModel(
                 val pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId
                 val pendingCloseTripId = pendingSyncState.pendingClose?.tripId
                 val hasActiveTrip = pendingSyncState.activeTripId != null && pendingCloseTripId == null
+                val hasActiveLocalTrip = pendingSyncState.activeTrackingRef is ActiveTrackingRef.Local
                 val storedTripId = pendingCloseTripId
                     ?: pendingSyncState.activeTripId
                     ?: pendingQueueTripId
@@ -333,6 +334,7 @@ class AppViewModel(
                         },
                         isTracking = when {
                             state.isTracking -> true
+                            hasActiveLocalTrip -> true
                             hasActiveTrip -> true
                             else -> false
                         },
@@ -721,6 +723,26 @@ class AppViewModel(
         }
 
         viewModelScope.launch {
+            val pendingSyncState = pendingSyncStore.getState()
+            val activeLocalTrip = pendingSyncState.activeLocalTripId?.let { localTripId ->
+                pendingSyncState.localTrips.firstOrNull {
+                    it.localTripId == localTripId &&
+                        it.status == PendingSyncStore.LOCAL_TRIP_STATUS_ACTIVE
+                }
+            }
+            if (state.isTracking || activeLocalTrip != null || pendingSyncState.activeTrackingRef != null) {
+                val message = "Ya hay un recorrido activo."
+                _uiState.update {
+                    it.copy(
+                        isBusy = false,
+                        statusMessage = message,
+                        operationMessage = "Recorrido activo.",
+                        lastErrorMessage = message,
+                    )
+                }
+                return@launch
+            }
+
             val token = sessionStore.sessionData.first().token
             val category = state.category.trim()
             val localTripId = UUID.randomUUID().toString()
@@ -734,7 +756,7 @@ class AppViewModel(
                 startTime = Instant.now().toString(),
                 endTime = null,
                 status = PendingSyncStore.LOCAL_TRIP_STATUS_ACTIVE,
-                syncState = PendingSyncStore.LOCAL_TRIP_SYNC_LOCAL_CREATED,
+                syncState = PendingSyncStore.LOCAL_TRIP_SYNC_PENDING_CREATE,
             )
             _uiState.update { it.copy(isBusy = true, statusMessage = "Iniciando tracking...") }
             pendingSyncStore.upsertLocalTrip(localTrip)
@@ -796,15 +818,51 @@ class AppViewModel(
                 lastAcceptedPoint = null
                 distanceMinimumDiscardCountSinceLastAccepted = 0
             } else {
-                pendingSyncStore.removeLocalTrip(localTripId)
                 val error = startTripResult.exceptionOrNull()
                 if (isUnauthorizedError(error)) {
+                    pendingSyncStore.removeLocalTrip(localTripId)
                     markSessionExpired(
                         statusMessage = "Sesion expirada. Inicia sesion nuevamente.",
                         operationMessage = "Sesion expirada antes de iniciar tracking.",
                         clearUserContext = true,
                     )
+                } else if (isRemoteStartTransientError(error)) {
+                    _uiState.update { current ->
+                        current.copy(
+                            isBusy = false,
+                            isTracking = true,
+                            currentTripId = null,
+                            isSessionInvalid = false,
+                            pendingTripClose = false,
+                            statusMessage = "Recorrido local iniciado. Queda pendiente de sincronizacion.",
+                            operationMessage = "Recorrido local iniciado.",
+                            lastErrorMessage = "",
+                            lastLocationReadAttemptAt = "Sin intento",
+                            lastLocationObtainedAt = "Sin dato",
+                            lastSuccessfulSendAt = "Sin dato",
+                            lastFailedSendAt = "Sin dato",
+                            sendAttemptCount = 0,
+                            sendSuccessCount = 0,
+                            sendFailureCount = 0,
+                            lastLatitude = null,
+                            lastLongitude = null,
+                            lastAccuracy = null,
+                            lastSpeed = null,
+                            lastLocationTimestamp = "Sin dato",
+                            lastDiscardReason = "Sin descarte",
+                            lastFilterElapsedSeconds = null,
+                            lastFilterRequiredDistanceMeters = null,
+                            lastFilterActualDistanceMeters = null,
+                            secondsSinceLastAcceptedPoint = null,
+                            distanceMinimumDiscardCountSinceLastAccepted = 0,
+                            pendingPointCount = 0,
+                            lastSendType = "Sin envio",
+                        )
+                    }
+                    lastAcceptedPoint = null
+                    distanceMinimumDiscardCountSinceLastAccepted = 0
                 } else {
+                    pendingSyncStore.removeLocalTrip(localTripId)
                     val message = if (isNetworkError(error)) {
                         "No se pudo iniciar el recorrido por problema de conexion."
                     } else {
@@ -849,7 +907,6 @@ class AppViewModel(
                 }
 
             if (activeTrackingRef is ActiveTrackingRef.Local) {
-                stopTrackingService(appContext)
                 val closedLocalTrip = pendingSyncStore.markLocalTripClosedLocally(
                     localTripId = activeTrackingRef.localTripId,
                 )
@@ -968,6 +1025,12 @@ class AppViewModel(
         return error is IOException || error is RefreshTransientException
     }
 
+    private fun isRemoteStartTransientError(error: Throwable?): Boolean {
+        if (isNetworkError(error)) return true
+        val statusCode = (error as? HttpException)?.code() ?: return false
+        return statusCode == 408 || statusCode == 429 || statusCode in 500..599
+    }
+
     private suspend fun markSessionExpired(
         statusMessage: String,
         operationMessage: String,
@@ -1028,6 +1091,7 @@ class AppViewModel(
         val pendingQueueTripId = pendingSyncState.pendingPoints.firstOrNull()?.tripId
         val pendingCloseTripId = pendingSyncState.pendingClose?.tripId
         val hasActiveTrip = pendingSyncState.activeTripId != null && pendingCloseTripId == null
+        val hasActiveLocalTrip = pendingSyncState.activeTrackingRef is ActiveTrackingRef.Local
         val storedTripId = forceTripId
             ?: pendingCloseTripId
             ?: pendingSyncState.activeTripId
@@ -1043,6 +1107,7 @@ class AppViewModel(
                 },
                 isTracking = when {
                     state.isTracking -> true
+                    hasActiveLocalTrip -> true
                     hasActiveTrip -> true
                     else -> false
                 },

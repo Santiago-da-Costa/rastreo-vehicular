@@ -274,7 +274,7 @@ private fun TripSummaryCard(state: UiState) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                text = if (state.currentTripId != null) "Recorrido activo" else "Recorrido desactivado",
+                text = if (state.isTracking) "Recorrido activo" else "Recorrido desactivado",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
@@ -337,7 +337,7 @@ private fun MainControlsCard(
     onRefreshVehicles: () -> Unit,
 ) {
     val userCanTrack = state.currentUser?.permissions?.get("edit_trips") == true
-    val isTrackingActive = state.currentTripId != null
+    val isTrackingActive = state.isTracking
     var vehicleExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
 
@@ -793,7 +793,7 @@ private fun formatBoolean(value: Boolean): String {
 
 private fun buildSelectionHint(state: UiState): String {
     return when {
-        state.currentTripId != null -> "Recorrido en curso."
+        state.isTracking -> "Recorrido en curso."
         state.selectedVehicleId == null && state.category.isBlank() -> "Seleccione vehiculo y categoria."
         state.selectedVehicleId == null -> "Seleccione un vehiculo."
         state.category.isBlank() -> "Seleccione una categoria."
@@ -827,7 +827,7 @@ private fun resolveOperationalMessage(state: UiState): String {
     ) {
         return "Recorrido iniciado."
     }
-    if (state.currentTripId != null) {
+    if (state.isTracking) {
         return "Recorrido iniciado."
     }
     if (statusMessage.contains("Sesion restaurada", ignoreCase = true)) {
